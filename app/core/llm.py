@@ -133,9 +133,9 @@ async def process_request_with_llm(user_message: str):
     log.info(f"-->Ответ: {res}\n")
     if res:
         try:
-            res = str(wrap_answer_with_ssml(res))
+            wrapped_res = str(wrap_answer_with_ssml(res))
             async with PostClient(TTS_URL) as client:
-                post_result = await client.post(text=res)
+                post_result = await client.post(text=wrapped_res)
             log.info(post_result)
         except Exception as e:
             log.error(f"{e}")
