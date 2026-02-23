@@ -25,7 +25,7 @@ def filter_text_math(input_str: str) -> str:
     res = input_str.strip()
 
     # Разделители для поиска значения после них
-    delimiters = ("≈", "~", "равен", "=", "является", "— ", "это")
+    delimiters = ("≈", "~", "равен", "равно", "=", "является", "— ", "это")
     is_obtained_delimiter = False
 
     for delimiter in delimiters:
