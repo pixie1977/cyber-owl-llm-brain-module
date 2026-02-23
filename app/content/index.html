@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>🎙️ Cyber Owl STT — Распознавание речи</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f7f7f7;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #e9ecef;
+            min-height: 60px;
+            font-size: 1.1em;
+            color: #495057;
+        }
+        .transcript-widget {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: white;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 1em;
+            line-height: 1.5;
+        }
+        .transcript-entry {
+            padding: 8px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .timestamp {
+            font-size: 0.85em;
+            color: #6c757d;
+            margin-left: 10px;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .links {
+            text-align: center;
+            margin: 30px 0 10px;
+            font-size: 1.1em;
+        }
+        .links a {
+            margin: 0 15px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .links a:hover {
+            text-decoration: underline;
+        }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .success { background-color: #d4edda; color: #155724; }
+    </style>
+</head>
+<body>
+    <h1>🎙️ Cyber Owl STT</h1>
+
+    <div class="links">
+        <a href="/docs" target="_blank">📖 API Документация (Swagger)</a> |
+        <a href="/redoc" target="_blank">📚 ReDoc</a>
+    </div>
+
+    <div class="controls">
+        <button id="startBtn" onclick="startListening()">▶️ Старт</button>
+        <button id="stopBtn" onclick="stopListening()" disabled>⏹️ Стоп</button>
+    </div>
+
+    <div id="status" class="status">Ожидание команды...</div>
+
+    <h3>Распознанный текст:</h3>
+    <div id="transcript" class="transcript-widget"></div>
+
+    <script>
+        let pollingInterval = null;
+        const transcriptEl = document.getElementById("transcript");
+        const statusEl = document.getElementById("status");
+        const startBtn = document.getElementById("startBtn");
+        const stopBtn = document.getElementById("stopBtn");
+
+        function setStatus(message, isError = false) {
+            statusEl.textContent = message;
+            statusEl.className = "status " + (isError ? "error" : "success");
+        }
+
+        function addTranscriptEntry(text) {
+            if (!text.trim()) return;
+
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ru-RU');
+
+            const entry = document.createElement("div");
+            entry.className = "transcript-entry";
+            entry.innerHTML = `<strong>${text}</strong> <span class="timestamp">${timeStr}</span>`;
+
+            transcriptEl.prepend(entry); // Новые записи сверху
+        }
+
+        async function fetchSpeech() {
+            try {
+                const response = await fetch("/api/stt/latest");
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.text && data.text.trim()) {
+                        addTranscriptEntry(data.text);
+                    }
+                } else {
+                    const error = await response.json().catch(() => ({ detail: "Неизвестная ошибка" }));
+                    console.warn("Ошибка STT:", error.detail);
+                }
+            } catch (err) {
+                console.error("Сетевая ошибка:", err.message);
+            }
+        }
+
+        function startListening() {
+            setStatus("Поллинг активен. Ожидание речи...");
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            // Запрашивать текст каждые 2 секунды
+            pollingInterval = setInterval(fetchSpeech, 2000);
+        }
+
+        function stopListening() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+            setStatus("Поллинг остановлен.");
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        // При загрузке страницы очистить виджет
+        transcriptEl.innerHTML = "";
+    </script>
+</body>
+</html>
