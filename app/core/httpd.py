@@ -55,10 +55,11 @@ async def receive_text(request: TextRequest) -> dict:
 
 @app.get("/latest")
 async def get_latest_transcript() -> dict:
+    global latest_question
     """
     Возвращает последний полученный текст.
 
     Returns:
         JSON с полем `transcript` (или пустой строкой, если текста нет).
     """
-    return {"transcript": latest_transcript or ""}
+    return {"transcript": latest_question or ""}

@@ -2,12 +2,9 @@
 Модуль инициализации LLM-агента с инструментами и системным промптом.
 """
 import asyncio
-from datetime import datetime
-import logging
-import re
 
 from langchain.tools import tool
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_ollama import ChatOllama
@@ -17,8 +14,8 @@ from app.core.client import PostClient
 from app.core.logger import get_logger
 from app.tools.math import calculator
 from app.tools.time import get_time
-from app.utils.number_to_words_ru import float_to_text_russian
 from app.utils.basic_text_utils import filter_text_math, process_time_answers, wrap_answer_with_ssml
+from app.utils.number_to_words_ru import float_to_text_russian
 
 # --- Настройка логирования ---
 log = get_logger(__name__)
@@ -160,7 +157,7 @@ async def main():
         "что такое магнетар"
     ]
     for q in questions:
-        await process_request(q)
+        await process_request_with_llm(q)
 
 
 if __name__ == "__main__":
