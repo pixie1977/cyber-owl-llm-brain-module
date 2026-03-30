@@ -11,6 +11,7 @@ from typing import Optional
 
 from app.config.config import MBB_DOC_ROOT
 from app.core.llm import process_request_with_llm
+from app.utils.basic_text_utils import find_and_crop_by_keywords
 from app.utils.levenstein_text_utils import similarity_ratio
 
 app = FastAPI(title="STT API Server")
@@ -44,12 +45,14 @@ async def receive_text(request: TextRequest) -> dict:
     """
     global latest_question
     global latest_response
-    latest_question = request.text.strip()
-
-    #проверяем, что нам на вход не приехалл наш же ответ
-    similarity_score = similarity_ratio(latest_question, latest_response)
-    if similarity_score < 0.5:
-        latest_response = await process_request_with_llm(latest_question)
+    question = request.text.strip()
+    question = find_and_crop_by_keywords(["сова", "чучело"], question)
+    if question:
+        latest_question = question
+        # проверяем, что нам на вход не приехал наш же ответ
+        similarity_score = similarity_ratio(latest_question, latest_response)
+        if similarity_score < 0.5:
+            latest_response = await process_request_with_llm(latest_question)
     return {"status": "success", "received_text": latest_question}
 
 

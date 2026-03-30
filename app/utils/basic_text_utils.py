@@ -3,9 +3,13 @@
 """
 
 import re
+from fuzzywuzzy import fuzz
 
+from app.core.logger import get_logger
 from app.utils.time_to_words import time_to_text
 
+
+log = get_logger(__name__)
 
 def filter_text_math(input_str: str) -> str:
     """
@@ -98,3 +102,43 @@ def wrap_answer_with_ssml(msg: str) -> dict:
         "</speak>"
     )
     return rs_ssml_text
+
+
+def fuzzy_find_fw(keyword: str,
+                  phrase: str,
+                  threshold: int = 80):
+    """
+    Поиск приблизительных вхождений keyword в phrase с помощью fuzzywuzzy.
+    threshold – минимальный процент сходства (0–100), по умолчанию 80 %.
+    Возвращает список кортежей (позиция, фрагмент, score).
+    """
+    kw = keyword.lower()
+    text = phrase.lower()
+    k = len(kw)
+    hits = []
+
+    if k == 0 or k > len(text):
+        return hits
+
+    for i in range(len(text) - k + 1):
+        window = text[i:i + k]
+        score = fuzz.ratio(kw, window)  # 100 – полное совпадение
+        if score >= threshold:
+            hits.append((i,
+                         phrase[i:i + k],  # оригинальный регистр
+                         score))
+    return hits
+
+def find_and_crop_by_keywords(key_words: list, text: str, threshold: int = 60) -> str:
+    for key_word in key_words:
+        res = fuzzy_find_fw(key_word, text.lower(), threshold=threshold)
+        if res:
+            for pos, frag, sc in res:
+                log.debug(f'  "{frag}" (позиция {pos}, сходство {sc}%)')
+                words = re.findall(r'[а-яё]+', text)
+                cropped_words = words[pos+1:]
+                cropped_text_local = ' '.join(cropped_words)
+                return cropped_text_local
+
+    log.info(f'Совпадений ключевых слов не найдено. Запрос не рассматривается. Запрос:{text}')
+    return ""

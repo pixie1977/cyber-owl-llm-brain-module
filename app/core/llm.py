@@ -4,7 +4,7 @@
 import asyncio
 
 from langchain.tools import tool
-from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
+from langchain.agents import create_tool_calling_agent, AgentExecutor  # Исправлено: langchain, а не langchain_classic
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_ollama import ChatOllama
@@ -126,20 +126,26 @@ async def process_request_with_llm(user_message: str):
     if was_math_tool_used:
         was_math_tool_used = False
         res = filter_text_math(res)
-        res = float_to_text_russian(res)
+        try:
+            res = float_to_text_russian(float(res))
+        except ValueError:
+            pass  # Если не число — оставляем как есть
     if was_time_tool_used:
         was_time_tool_used = False
-        res = process_time_answers(res)
-    log.info(f"-->Ответ: {res}\n")
+        time_text = process_time_answers(res)
+        if time_text:
+            res = time_text
+    log.info(f"--> Ответ: {res}\n")
     if res:
         try:
             wrapped_res = str(wrap_answer_with_ssml(res))
             async with PostClient(TTS_URL) as client:
                 post_result = await client.post(text=wrapped_res)
-            log.info(post_result)
+            log.info(f"Результат отправки в TTS: {post_result}")
         except Exception as e:
-            log.error(f"{e}")
+            log.error(f"Ошибка при отправке в TTS: {e}")
     return res
+
 
 # --- Пример использования ---
 async def main():
