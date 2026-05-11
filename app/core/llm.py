@@ -118,7 +118,7 @@ async def main():
         "Орфей и Эвридика",
     ]
     for q in questions:
-        await process_request_with_llm(q, expression_score)
+        await process_request_with_llm(q, None)
 
 
 if __name__ == "__main__":

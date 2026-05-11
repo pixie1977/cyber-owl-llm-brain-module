@@ -1,4 +1,5 @@
 # tests/test_qdrant_indexation.py
+import asyncio
 import os
 import time
 
@@ -69,3 +70,16 @@ def test_load_single_txt_into_qdrant(qdrant_client):
     ), "Количество векторов в Qdrant не совпадает с количеством документов."
 
     print(f"✅ Успешно загружено {collection_info.points_count} векторов в Qdrant.")
+
+
+async def main():
+    qdrant_client = QdrantClient(QDRANT_URL)
+    if not qdrant_client.collection_exists(TEST_COLLECTION_NAME):
+        qdrant_client.create_collection(
+            collection_name=TEST_COLLECTION_NAME,
+            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+        )
+    test_load_single_txt_into_qdrant(qdrant_client)
+
+if __name__ == "__main__":
+    asyncio.run(main())
