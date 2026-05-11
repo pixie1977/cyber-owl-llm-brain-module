@@ -5,9 +5,10 @@
 import re
 from math import pi
 
+from langchain_core.tools import tool
 from sympy import pi as sym_pi, sin, cos, tan
 from app.core.logger import get_logger
-
+from app.utils.text.number_to_words_ru import textify_result
 
 # --- Настройка логирования ---
 log = get_logger(__name__)
@@ -144,3 +145,30 @@ def calculator(expression: str) -> str:
     except Exception as e:
         log.error(f"Error in calculator for expression '{expression}': {e}")
         return "error"
+
+@tool(return_direct=True)
+def calculate_math_expression(expression: str, **kwargs) -> str:
+    """
+    Выполняет математические вычисления.
+
+    Обязательно используйте этот инструмент при любых числах или запросах вроде
+    'плюс', 'минус', 'сколько', 'умножить'. Даже для простых задач.
+
+    Example: 'cos(pi/2)' for cosine of half pi.
+
+    Args:
+        expression (str): Математическое выражение (например, '2+2', 'sqrt(9)').
+
+    Returns:
+        str: Результат в виде текста (например, «четыре»).
+    """
+    log.info(f"Инструмент вызван: calculate_math_expression с выражением '{expression}'")
+    try:
+        result = calculator(expression)
+        log.debug(f"Результат калькулятора: {result}")
+        final_text = textify_result(result)
+        log.info(f"Текст для TTS: {final_text}")
+        return final_text
+    except Exception as e:
+        log.error(f"Ошибка в calculate_math_expression: {e}")
+        return "Ошибка при вычислении"

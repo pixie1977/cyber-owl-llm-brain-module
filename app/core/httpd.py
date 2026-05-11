@@ -4,15 +4,18 @@ HTTP-сервер на FastAPI для STT с поддержкой GET и POST.
 """
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 
 from app.config.config import MBB_DOC_ROOT
 from app.core.llm import process_request_with_llm
-from app.utils.basic_text_utils import find_and_crop_by_keywords
-from app.utils.levenstein_text_utils import similarity_ratio
+from app.integration.integration_adapter import send_mat_sign_servo
+from app.tools.brawl import get_mat_count
+from app.utils.text.basic_text_utils import find_and_crop_by_keywords
+from app.utils.text.expression_language_detector import expression_detector
+from app.utils.text.levenstein_text_utils import similarity_ratio
 
 app = FastAPI(title="STT API Server")
 
@@ -46,13 +49,17 @@ async def receive_text(request: TextRequest) -> dict:
     global latest_question
     global latest_response
     question = request.text.strip()
+    expression_score = expression_detector.analyze(question)
+    mat_count = get_mat_count(expression_score)
+    if mat_count>0:
+        await send_mat_sign_servo(mat_count)
     question = find_and_crop_by_keywords(["сова", "чучело"], question)
     if question:
         latest_question = question
         # проверяем, что нам на вход не приехал наш же ответ
         similarity_score = similarity_ratio(latest_question, latest_response)
         if similarity_score < 0.5:
-            latest_response = await process_request_with_llm(latest_question)
+            latest_response = await process_request_with_llm(latest_question, expression_score)
     return {"status": "success", "received_text": latest_question}
 
 

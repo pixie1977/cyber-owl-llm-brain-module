@@ -6,7 +6,7 @@ import re
 from fuzzywuzzy import fuzz
 
 from app.core.logger import get_logger
-from app.utils.time_to_words import time_to_text
+from app.utils.text.time_to_words import time_to_text
 
 
 log = get_logger(__name__)
@@ -84,7 +84,7 @@ def process_time_answers(text: str) -> str:
     return None
 
 
-def wrap_answer_with_ssml(msg: str) -> dict:
+def wrap_answer_with_ssml(msg: str) -> str:
     """
     Оборачивает текстовое сообщение в SSML-разметку с низким тоном.
 

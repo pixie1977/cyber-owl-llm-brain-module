@@ -57,6 +57,27 @@ class PostClient:
             print(f"❌ Ошибка при отправке текста: {e}")
             return False
 
+    async def post_json(self, json: dict) -> bool:
+        """
+        Отправляет текстовую строку на сервер через POST-запрос.
+
+        :param json:
+        :return: True, если запрос успешен.
+        """
+        if not self.session:
+            print("❌ Сессия не открыта. Используйте контекстный менеджер.")
+            return False
+
+        try:
+            async with self.session.post(
+                f"{self.url}",
+                json=json
+            ) as resp:
+                return resp.status == 200
+        except Exception as e:
+            print(f"❌ Ошибка при отправке текста: {e}")
+            return False
+
     async def get_latest_transcript(self) -> str:
         """
         Получает последнюю распознанную фразу с сервера.

@@ -53,3 +53,7 @@ else:
 TTS_URL = os.getenv("TTS_URL")
 if not TTS_URL:
     raise ValueError("Не задан TTS_URL в .env")
+
+SERVO_URL = os.getenv("SERVO_URL")
+if not SERVO_URL:
+    raise ValueError("Не задан SERVO_URL в .env")

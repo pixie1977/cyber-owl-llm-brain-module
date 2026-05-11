@@ -1,9 +1,50 @@
 """
 Утилиты для преобразования чисел в текст на русском языке.
 """
+import re
+
 from app.core.logger import get_logger
+from num2words import num2words
 
 log = get_logger(__name__)
+
+import re
+
+
+def clean_math_text(text: str) -> str:
+    # Удаляем " целых ноль десятых", " целых ноль сотых" и т.д.
+    # Регулярка ищет паттерн "целых ноль ..." до конца строки или знака препинания
+    text = re.sub(r"\sцелых\sноль\s(десятых|сотых|тысячных)", "", text)
+
+    # Дополнительно: если num2words выдает "пять целых ноль десятых",
+    # останется просто "пять"
+    return text.strip()
+
+
+# Пример использования:
+# raw_text = "десять целых ноль десятых"
+# result = clean_math_text(raw_text) # Выдаст: "десять"
+
+
+def textify_result(result_str: str) -> str:
+    # 1. Извлекаем только конечное число из строки 'Result: 1/2 ~ 0.5000'
+    # Ищем число после тильды или просто последнее число
+    match = re.findall(r"[-+]?\d*\.\d+|\d+", result_str)
+    if not match:
+        return result_str
+
+    number = float(match[-1])  # Берем последнее найденное число (0.5000)
+
+    # 2. Переводим в текст (на русский)
+    # Например: 0.5 -> "ноль целых пять десятых"
+    prefix = "м+инус " if number < 0 else ""
+    text_result = prefix + num2words(abs(number), lang='ru')
+    text_result = clean_math_text(text_result)
+
+    # 3. Расставляем ударения для Silero (базовая логика или просто вернуть текст)
+    # Silero обычно неплохо справляется с простыми словами,
+    # но можно добавить плюсы в ключевые места вручную через .replace()
+    return text_result
 
 def float_to_text_russian(value: str) -> str:
     """
