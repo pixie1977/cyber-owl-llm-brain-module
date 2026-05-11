@@ -182,8 +182,8 @@ def ingest_docs(path: Path, collection_name: str = COLLECTION_NAME):
         sys.exit(1)
 
     # Инициализация модели эмбеддингов (после определения всех функций)
-    print(f"Загрузка модели эмбеддингов: {collection_name}")
-    embeddings = HuggingFaceEmbeddings(model_name=collection_name)
+    print(f"Загрузка модели эмбеддингов: {EMBEDDING_MODEL_NAME}")
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
 
     # Загрузка в Qdrant (если ещё не загружены в load_single_*)
     if any(doc.metadata.get("source", "").endswith(".pdf") for doc in documents):
