@@ -72,7 +72,7 @@ def test_load_single_txt_into_qdrant(qdrant_client):
     print(f"✅ Успешно загружено {collection_info.points_count} векторов в Qdrant.")
 
 
-async def main():
+def main():
     qdrant_client = QdrantClient(QDRANT_URL)
     if not qdrant_client.collection_exists(TEST_COLLECTION_NAME):
         qdrant_client.create_collection(
@@ -82,4 +82,4 @@ async def main():
     test_load_single_txt_into_qdrant(qdrant_client)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
