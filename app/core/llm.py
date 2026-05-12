@@ -7,7 +7,7 @@ import re
 from typing import Dict
 
 from langchain.agents import create_agent
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, trim_messages
 from langchain_ollama import ChatOllama
 
 from app.config.config import MBB_OLLAMA_MODEL_NAME
@@ -46,9 +46,22 @@ log.info("Системный промпт и шаблон загружены.")
 
 structured_system_prompt = SystemMessage(content=system_prompt)
 
+# Настраиваем автоматическое «окно» памяти
+trimmer = trim_messages(
+    max_tokens=2048,                 # Жесткий лимит токенов в памяти (безопасно для 8GB)
+    strategy="last",                # Удаляем старые, оставляем самые свежие реплики
+    token_counter=llm,              # Используем Qwen для точного подсчета токенов
+    include_system=True,            # КРИТИЧНО: никогда не удалять твой SOTA-промпт!
+    allow_partial=False,            # Не резать сообщения пополам
+    start_on="human"                # Контекст всегда должен начинаться с вопроса юзера
+)
+
+# Теперь модель автоматически очищает историю ПЕРЕД тем, как прочитать её
+llm_with_trimmer = trimmer | llm
+
 # --- Создание агента ---
 agent_executor = create_agent(
-    model=llm,
+    model=llm_with_trimmer,
     tools=tools,
     system_prompt=structured_system_prompt,
 )
