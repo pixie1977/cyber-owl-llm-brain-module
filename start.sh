@@ -1,5 +1,5 @@
 #!/bin/bash
-# 🐍 Скрипт запуска Cyber Owl STT
+# 🐍 Скрипт запуска Cyber Owl LLM Brain
 # Автоматически создаёт виртуальное окружение и устанавливает зависимости
 
 set -e  # Прерывать выполнение при ошибке
@@ -39,7 +39,7 @@ if [ ! -f "$SCRIPT_DIR/.env" ]; then
 fi
 
 # Запуск приложения
-echo "🚀 Запуск Cyber Owl STT..."
+echo "🚀 Запуск Cyber Owl LLM Brain..."
 echo "   Для остановки нажмите Ctrl+C"
 
 exec python -m app.main
