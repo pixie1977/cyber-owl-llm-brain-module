@@ -50,7 +50,7 @@ structured_system_prompt = SystemMessage(content=system_prompt)
 
 # Настраиваем автоматическое «окно» памяти
 trimmer = trim_messages(
-    max_tokens=2048,                 # Жесткий лимит токенов в памяти (безопасно для 8GB)
+    max_tokens=1024,                 # Жесткий лимит токенов в памяти (безопасно для 8GB)
     strategy="last",                # Удаляем старые, оставляем самые свежие реплики
     token_counter=llm,              # Используем Qwen для точного подсчета токенов
     include_system=True,            # КРИТИЧНО: никогда не удалять твой SOTA-промпт!
