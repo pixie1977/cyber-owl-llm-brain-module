@@ -21,7 +21,7 @@ from app.tools.qdrant import search_knowledge_base
 from app.tools.time import get_current_time_as_str
 
 
-BUFFER_SIZE = 1024
+BUFFER_SIZE = 256
 
 # --- Настройка логирования ---
 log = get_logger(__name__)
