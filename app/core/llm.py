@@ -44,7 +44,6 @@ llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     temperature=0.02,
     base_url="http://localhost:11434",
-    num_ctx=BUFFER_SIZE
 )
 log.info("Модель LLM инициализирована: %s", llm.model)
 log.info("Системный промпт и шаблон загружены.")
