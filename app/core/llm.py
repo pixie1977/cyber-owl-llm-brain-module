@@ -21,6 +21,8 @@ from app.tools.qdrant import search_knowledge_base
 from app.tools.time import get_current_time_as_str
 
 
+BUFFER_SIZE = 1024
+
 # --- Настройка логирования ---
 log = get_logger(__name__)
 
@@ -42,6 +44,7 @@ llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     temperature=0.02,
     base_url="http://localhost:11434",
+    num_ctx=BUFFER_SIZE
 )
 log.info("Модель LLM инициализирована: %s", llm.model)
 log.info("Системный промпт и шаблон загружены.")
@@ -50,7 +53,7 @@ structured_system_prompt = SystemMessage(content=system_prompt)
 
 # Настраиваем автоматическое «окно» памяти
 trimmer = trim_messages(
-    max_tokens=1024,                 # Жесткий лимит токенов в памяти (безопасно для 8GB)
+    max_tokens=BUFFER_SIZE,                 # Жесткий лимит токенов в памяти (безопасно для 8GB)
     strategy="last",                # Удаляем старые, оставляем самые свежие реплики
     token_counter=llm,              # Используем Qwen для точного подсчета токенов
     include_system=True,            # КРИТИЧНО: никогда не удалять твой SOTA-промпт!
