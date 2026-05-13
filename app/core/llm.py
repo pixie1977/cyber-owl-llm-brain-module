@@ -7,7 +7,7 @@ import re
 from typing import Dict
 
 from langchain.agents import create_agent
-from langchain_core.messages import SystemMessage, trim_messages
+from langchain_core.messages import SystemMessage, trim_messages, HumanMessage
 from langchain_ollama import ChatOllama
 
 from app.config.config import MBB_OLLAMA_MODEL_NAME
@@ -33,6 +33,8 @@ tools = [
     get_random_joke,
     trigger_vicious_response,
 ]
+
+current_chat_history = list()
 
 
 # --- Настройка модели Ollama ---
@@ -61,7 +63,7 @@ llm_with_trimmer = trimmer | llm
 
 # --- Создание агента ---
 agent_executor = create_agent(
-    model=llm_with_trimmer,
+    model=llm,
     tools=tools,
     system_prompt=structured_system_prompt,
 )
@@ -79,14 +81,25 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
         str: Готовый ответ для озвучивания.
         :param score:
     """
+    global current_chat_history
     log.info("Вопрос: %s", user_message)
+
+    raw_messages = [
+        SystemMessage(content=system_prompt),
+        *current_chat_history,
+        HumanMessage(content=user_message)
+    ]
+
+    # 2. ВЫЗЫВАЕМ ТРИММЕР ВРУЧНУЮ
+    # Он мгновенно отсечет старый хвост флуда, но сохранит SystemMessage и последние реплики
+    trimmed_messages = trimmer.invoke(raw_messages)
 
     mat_count = get_mat_count(expression_score)
     if mat_count > 0:
         user_message = "ОБНАРУЖЕНО ХАМСТВО. ИСПОЛЬЗУЙ BATTLE_MODE: ELITE"
 
     try:
-        response = await agent_executor.ainvoke(dict(messages=[("human", user_message)]))
+        response = await agent_executor.ainvoke(dict(messages=trimmed_messages))  # Передаем урезанный список)
     except Exception as e:
         log.error("Ошибка при выполнении агента: %s", e)
         res = "Не удалось обработать запрос"
