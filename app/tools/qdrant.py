@@ -23,7 +23,7 @@ vector_store = QdrantVectorStore(
 
 
 @tool
-def search_knowledge_base(query: str) -> str:
+def search_knowledge_base(query: str, **kwargs) -> tuple[str, bool]:
     """
     Выполняет поиск в базе знаний по заданному запросу.
 
@@ -39,6 +39,6 @@ def search_knowledge_base(query: str) -> str:
     docs = vector_store.similarity_search(query, k=3)
 
     if not docs:
-        return "В базе знаний информации не найдено."
+        return "В базе знаний информации не найдено.", False
 
-    return "\n---\n".join(doc.page_content for doc in docs)
+    return "\n---\n".join(doc.page_content for doc in docs), False

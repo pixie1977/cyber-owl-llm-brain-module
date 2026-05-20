@@ -72,7 +72,10 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
                 tool_func = next((t for t in tools if getattr(t, "name", getattr(t, "__name__", None)) == tool_call["name"]), None)
                 if tool_func:
                     # Выполняем инструмент локально
-                    tool_output = tool_func.invoke(tool_call["args"])
+                    tool_output, is_direct_answer = tool_func.invoke(tool_call["args"])
+
+                    if is_direct_answer:
+                        return tool_output
 
                     # Отправляем результат обратно модели для финального ответа
                     final_response = await llm.ainvoke([

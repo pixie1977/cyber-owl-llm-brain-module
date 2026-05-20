@@ -15,7 +15,8 @@ log = get_logger(__name__)
 
 
 def trig_replace(match, use_degrees: bool = True) -> str:
-    """Обрабатывает тригонометрические функции, преобразуя аргументы в нужную систему.
+    """
+    Обрабатывает тригонометрические функции, преобразуя аргументы в нужную систему.
 
     Args:
         match: Регулярное выражение с группами (функция, аргумент).
@@ -36,17 +37,18 @@ def trig_replace(match, use_degrees: bool = True) -> str:
 
     if func == "sin":
         return str(sin(rad_arg))
-    elif func == "cos":
+    if func == "cos":
         return str(cos(rad_arg))
-    elif func == "tan":
+    if func == "tan":
         return str(tan(rad_arg))
-    elif func == "ctg":
-        return str(1/tan(rad_arg))
+    if func == "ctg":
+        return str(1 / tan(rad_arg))
     return "0"
 
 
 def calculator(expression: str) -> str:
-    """Выполняет математические вычисления с поддержкой дробей, корней, тригонометрии и выбора режима.
+    """
+    Выполняет математические вычисления с поддержкой дробей, корней, тригонометрии и выбора режима.
 
     Поддерживает:
       - sin, cos, tan, ctg
@@ -71,12 +73,12 @@ def calculator(expression: str) -> str:
     log.info(f"calculator tool: Получено выражение '{expression}'")
 
     try:
-        from sympy import sympify, sqrt, simplify, nan
+        from sympy import sympify, simplify
         import sympy as sp
 
         expr = expression.strip()
 
-        # Определяем режим: если есть 'rad', 'radian', 'рад' или 'π' без ° — считаем радианами
+        # Определяем режим: если есть 'rad', 'radian', 'рад' или 'pi' без ° — считаем радианами
         # Если есть '°', 'deg', 'град' — градусы
         use_degrees = True
 
@@ -89,7 +91,7 @@ def calculator(expression: str) -> str:
             expr = re.sub(r"°|\s*(deg|град)\b", "", expr, flags=re.IGNORECASE)
 
         # Заменяем π, pi, пи на символ π
-        expr = re.sub(r"pi\(\)|pi|π|пи", f"{pi}", expr, flags=re.IGNORECASE)
+        expr = re.sub(r"pi\(\)|pi|π|пи", str(pi), expr, flags=re.IGNORECASE)
 
         # Заменяем √x → sqrt(x), учитываем отсутствие скобок
         expr = re.sub(r"√\s*", "sqrt(", expr)
@@ -104,7 +106,7 @@ def calculator(expression: str) -> str:
             trig_pattern,
             lambda m: trig_replace(m, use_degrees=use_degrees),
             expr,
-            flags=re.IGNORECASE
+            flags=re.IGNORECASE,
         )
 
         # Закрытие открытых скобок (простая эвристика)
@@ -118,24 +120,22 @@ def calculator(expression: str) -> str:
         # Численное приближение
         try:
             float_result = float(simplified.evalf())
-            if abs(float_result) == float('inf'):
+            if abs(float_result) == float("inf"):
                 numeric_str = "infinity"
             elif simplified is sp.nan:
                 numeric_str = "nan"
             else:
-                # Округление до 4 знаков после запятой
                 numeric_str = f"{round(float_result, 4):.4f}"
         except Exception:
             numeric_str = "error"
-
-        # Форматирование результата
-        str_result = str(simplified).replace("sqrt", "sqrt")
 
         # Коррекция: значения близкие к нулю → 0.0000
         if numeric_str != "error" and abs(float(simplified.evalf())) < 1e-10:
             numeric_str = "0.0000"
 
-        # Используем только ASCII в логах
+        str_result = str(simplified).replace("sqrt", "sqrt")
+
+        # Логирование (только ASCII)
         log.info(
             f"Mode: {'degrees' if use_degrees else 'radians'} | "
             f"Input: {expression} -> "
@@ -146,8 +146,8 @@ def calculator(expression: str) -> str:
         log.error(f"Error in calculator for expression '{expression}': {e}")
         return "error"
 
-@tool(return_direct=True)
-def calculate_math_expression(expression: str, **kwargs) -> str:
+@tool
+def calculate_math_expression(expression: str, **kwargs) -> tuple[str, bool]:
     """
     Выполняет математические вычисления.
 
@@ -168,7 +168,7 @@ def calculate_math_expression(expression: str, **kwargs) -> str:
         log.debug(f"Результат калькулятора: {result}")
         final_text = textify_result(result)
         log.info(f"Текст для TTS: {final_text}")
-        return final_text
+        return final_text, True
     except Exception as e:
         log.error(f"Ошибка в calculate_math_expression: {e}")
-        return "Ошибка при вычислении"
+        return "Ошибка при вычислении", False

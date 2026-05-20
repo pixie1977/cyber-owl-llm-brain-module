@@ -1,5 +1,5 @@
 """
-Модуль для получения текущего времени.
+Модуль для получения текущего времени в текстовом виде.
 """
 
 from datetime import datetime
@@ -19,25 +19,25 @@ def get_time() -> str:
     Возвращает текущее время в формате ЧЧ:ММ.
 
     Returns:
-        str: Текущее время в виде строки (например, "15:42").
+        str: Текущее время (например, "15:42").
     """
     return datetime.now().strftime("%H:%M")
 
 
-@tool(return_direct=True)
-def get_current_time_as_str(**kwargs) -> str:
+@tool
+def get_current_time_as_str(**kwargs) -> tuple[str, bool]:
     """
-    Возвращает текущее время словами.
+    Возвращает текущее время словами на русском языке.
 
-    Вызывай ТОЛЬКО если пользователь прямо спрашивает «который час» или «сколько времени».
+    Вызывайте ТОЛЬКО при прямом вопросе: «который час?», «сколько времени?» и т.п.
 
     Args:
-        **kwargs: Фиктивные аргументы (для совместимости с вызовом инструмента).
+        **kwargs: Игнорируемые аргументы (совместимость с LangChain).
 
     Returns:
-        str: Текущее время на русском языке (например, «двенадцать часов тридцать минут»).
+        tuple[str, bool]: Кортеж из текстового времени и флага завершения цепочки.
     """
     current_time = get_time()
-    log.info(f"Инструмент вызван: get_current_time -> {current_time}")
+    log.info("Инструмент вызван: get_current_time -> %s", current_time)
     str_time = Utils.time_as_words()
-    return str_time
+    return str_time, True
