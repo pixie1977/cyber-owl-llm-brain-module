@@ -51,7 +51,7 @@ structured_system_prompt = SystemMessage(content=system_prompt)
 agent_executor = create_agent(
     model=llm,
     tools=tools,
-    system_prompt=structured_system_prompt,
+    #system_prompt=structured_system_prompt, #на jetson используем захардкоженный промт и пересобранную модель
 )
 log.info("Агент и исполнитель инициализированы.")
 
