@@ -36,37 +36,23 @@ tools = [
 
 
 # --- Настройка модели Ollama ---
+# инструменты подключаем напрямую
+# ландграф убивает кэш и производительность джетсона
 llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     temperature=0.02,
     base_url="http://localhost:11434",
     num_ctx=1024
-)
+).bind_tools(tools)
+
 log.info("Модель LLM инициализирована: %s", llm.model)
 log.info("Системный промпт и шаблон загружены.")
 
 structured_system_prompt = SystemMessage(content=system_prompt)
 
-# --- Создание агента ---
-agent_executor = create_agent(
-    model=llm,
-    tools=tools,
-    #system_prompt=structured_system_prompt, #на jetson используем захардкоженный промт и пересобранную модель
-)
-log.info("Агент и исполнитель инициализированы.")
-
 
 async def process_request_with_llm(user_message: str, expression_score: Dict) -> str:
-    """
-    Обрабатывает запрос пользователя через агента, применяет постобработку.
-
-    Args:
-        user_message (str): Входной запрос.
-
-    Returns:
-        str: Готовый ответ для озвучивания.
-        :param score:
-    """
+    """Обрабатывает запрос пользователя напрямую через нативный Tool Calling Ollama."""
     log.info("Вопрос: %s", user_message)
 
     mat_count = get_mat_count(expression_score)
@@ -74,25 +60,45 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
         user_message = "ОБНАРУЖЕНО ХАМСТВО. ИСПОЛЬЗУЙ BATTLE_MODE: ELITE"
 
     try:
-        response = await agent_executor.ainvoke(dict(messages=[("human", user_message)]))
+        # 1. Делаем первый быстрый запрос к Ollama (благодаря 'sova' промпт уже в кэше GPU!)
+        ai_message = await llm.ainvoke([("human", user_message)])
+
+        # 2. Проверяем, хочет ли модель вызвать инструмент
+        if ai_message.tool_calls:
+            for tool_call in ai_message.tool_calls:
+                log.info("Сова вызывает инструмент: %s", tool_call["name"])
+
+                # Ищем нужную функцию в нашем списке инструментов
+                tool_func = next((t for t in tools if t.__name__ == tool_call["name"]), None)
+                if tool_func:
+                    # Выполняем инструмент локально
+                    tool_output = tool_func.invoke(tool_call["args"])
+
+                    # Отправляем результат обратно модели для финального ответа
+                    final_response = await llm.ainvoke([
+                        ("human", user_message),
+                        ai_message,
+                        {"role": "tool", "content": str(tool_output), "tool_call_id": tool_call["id"]}
+                    ])
+                    res = final_response.content
+                else:
+                    res = "Инструмент не найден"
+        else:
+            # Если инструменты не нужны, берем прямой ответ модели
+            res = ai_message.content
+
     except Exception as e:
-        log.error("Ошибка при выполнении агента: %s", e)
-        res = "Не удалось обработать запрос"
-        return res
+        log.error("Ошибка инференса Совы: %s", e)
+        return "Не удалось обработать запрос"
 
-    messages = response.get("messages")
-    ai_msg = messages[-1]
-    res = ai_msg.content
+    # --- Твоя постобработка текста для TTS ---
     res = re.sub(r'[\u4e00-\u9fff]+', '', res)  # убираем иероглифы
-
-    # Чистим математические символы
     math_symbols = ['√', '≈', '/', 'π', '²', '³']
     for symbol in math_symbols:
         res = res.replace(symbol, '')
 
     log.info("--> Ответ: %s", res)
 
-    # Отправка в TTS
     if res.strip():
         await send_to_tts(res)
     return res
