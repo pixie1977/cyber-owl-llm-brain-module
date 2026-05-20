@@ -69,7 +69,7 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
                 log.info("Сова вызывает инструмент: %s", tool_call["name"])
 
                 # Ищем нужную функцию в нашем списке инструментов
-                tool_func = next((t for t in tools if t.__name__ == tool_call["name"]), None)
+                tool_func = next((t for t in tools if getattr(t, "name", getattr(t, "__name__", None)) == tool_call["name"]), None)
                 if tool_func:
                     # Выполняем инструмент локально
                     tool_output = tool_func.invoke(tool_call["args"])
