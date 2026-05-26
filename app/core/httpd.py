@@ -70,7 +70,7 @@ async def receive_text(request: TextRequest) -> dict:
     question = find_and_crop_by_keywords(
         key_words=["совунья", "чувырло"],
         text=question,
-        threshold=80
+        threshold=50
     )
     if question:
         latest_question = question
