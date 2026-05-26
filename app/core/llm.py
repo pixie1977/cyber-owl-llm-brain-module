@@ -75,16 +75,16 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
                     tool_output, is_direct_answer = tool_func.invoke(tool_call["args"])
 
                     if is_direct_answer is True:
-                        return tool_output
-
-                    # Отправляем результат обратно модели для финального ответа
-                    final_response = await llm.ainvoke([
-                        ("system", structured_system_prompt),
-                        ("human", user_message),
-                        ai_message,
-                        {"role": "tool", "content": str(tool_output), "tool_call_id": tool_call["id"]}
-                    ])
-                    res = final_response.content
+                        res = tool_output
+                    else:
+                        # Отправляем результат обратно модели для финального ответа
+                        final_response = await llm.ainvoke([
+                            ("system", structured_system_prompt),
+                            ("human", user_message),
+                            ai_message,
+                            {"role": "tool", "content": str(tool_output), "tool_call_id": tool_call["id"]}
+                        ])
+                        res = final_response.content
                 else:
                     res = "Инструмент не найден"
         else:
