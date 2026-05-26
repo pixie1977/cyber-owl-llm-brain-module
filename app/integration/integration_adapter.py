@@ -51,6 +51,12 @@ async def send_to_servo(data: dict, url: str) -> None:
     except Exception as e:
         log.error("Ошибка при отправке в сервопривод: %s", e)
 
+async def send_ready_servo() -> None:
+    url = f"{SERVO_URL}/sleep"
+    await send_to_servo(data={}, url=url)
+    await asyncio.sleep(1)
+    url = f"{SERVO_URL}/happy"
+    await send_to_servo(data={}, url=url)
 
 async def send_mat_sign_servo(count: int) -> None:
     """

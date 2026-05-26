@@ -42,7 +42,7 @@ llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     temperature=0.02,
     base_url="http://localhost:11434",
-    num_ctx=1024
+    num_ctx=1024,
 ).bind_tools(tools)
 
 log.info("Модель LLM инициализирована: %s", llm.model)
@@ -74,11 +74,12 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
                     # Выполняем инструмент локально
                     tool_output, is_direct_answer = tool_func.invoke(tool_call["args"])
 
-                    if is_direct_answer:
+                    if is_direct_answer is True:
                         return tool_output
 
                     # Отправляем результат обратно модели для финального ответа
                     final_response = await llm.ainvoke([
+                        ("system", structured_system_prompt),
                         ("human", user_message),
                         ai_message,
                         {"role": "tool", "content": str(tool_output), "tool_call_id": tool_call["id"]}
