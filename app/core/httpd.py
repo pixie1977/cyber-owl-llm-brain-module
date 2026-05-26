@@ -68,7 +68,7 @@ async def receive_text(request: TextRequest) -> dict:
     if mat_count>0:
         await send_mat_sign_servo(mat_count)
     question = find_and_crop_by_keywords(
-        key_words=["совунья", "чувырло"],
+        key_words=["совунья", "чувырло","чучело"],
         text=question,
         threshold=50
     )
