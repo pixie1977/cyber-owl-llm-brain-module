@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     # ---- 2. ЭТО вызовется ПРИ ЗАВЕРШЕНИИ РАБОТЫ (СТОПЕ) ----
     print("Поведенческий модуль останавливается...")
 
-app = FastAPI(title="STT API Server")
+app = FastAPI(title="STT API Server", lifespan=lifespan)
 
 # Подключаем статические файлы
 print(f"MBB_DOC_ROOT={MBB_DOC_ROOT}")
