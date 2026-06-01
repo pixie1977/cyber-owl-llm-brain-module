@@ -51,12 +51,10 @@ async def receive_text(request: TextRequest) -> dict:
     Returns:
         JSON с подтверждением.
     """
-    global latest_question
-    global latest_response
     global behaviour
     question = request.text.strip()
     await behaviour.post_user_query(question)
-    return {"status": "success", "received_text": latest_question}
+    return {"status": "success", "received_text": question}
 
 @app.post("/image_detect")
 async def receive_image_detect(request: list[FaceDetection]) -> dict:
