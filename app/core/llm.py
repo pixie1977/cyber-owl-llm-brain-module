@@ -6,43 +6,41 @@ import asyncio
 import re
 from typing import Dict
 
-from langchain.agents import create_agent
 from langchain_core.messages import SystemMessage
 from langchain_ollama import ChatOllama
 
 from app.config.config import MBB_OLLAMA_MODEL_NAME
 from app.core.logger import get_logger
 from app.core.promts import system_prompt
-from app.integration.integration_adapter import send_to_tts
-from app.tools.brawl import get_mat_count, trigger_vicious_response
-from app.tools.jokes import get_random_joke
-from app.tools.math import calculate_math_expression
+from app.tools.brawl import get_mat_count, trigger_vicious_response, trigger_violent_mode
+from app.tools.jokes import joke_tool
+from app.tools.math import math_tool
 from app.tools.qdrant import search_knowledge_base
-from app.tools.time import get_current_time_as_str
-
+from app.tools.time import time_tool
+from app.tools.toast import toast_tool
 
 # --- Настройка логирования ---
 log = get_logger(__name__)
 
-
 # Список инструментов
 tools = [
-    get_current_time_as_str,
-    calculate_math_expression,
-    search_knowledge_base,
-    get_random_joke,
     trigger_vicious_response,
+    trigger_violent_mode,
+    time_tool,
+    math_tool,
+    search_knowledge_base,
+    joke_tool,
+    toast_tool,
 ]
-
 
 # --- Настройка модели Ollama ---
 # инструменты подключаем напрямую
 # ландграф убивает кэш и производительность джетсона
 llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
-    temperature=0.02,
+    temperature=0.01,
     base_url="http://localhost:11434",
-    num_ctx=1024,
+    num_ctx=4096,
 ).bind_tools(tools)
 
 log.info("Модель LLM инициализирована: %s", llm.model)
@@ -57,43 +55,49 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
 
     mat_count = get_mat_count(expression_score)
     if mat_count > 0:
-        user_message = "ОБНАРУЖЕНО ХАМСТВО. ИСПОЛЬЗУЙ BATTLE_MODE: ELITE"
+        res = trigger_violent_mode()
+    else:
+        try:
+            # 1. Делаем первый быстрый запрос к Ollama (благодаря 'sova' промпт уже в кэше GPU!)
+            ai_message = await llm.ainvoke(  # Убедитесь, что ваш массив сообщений для API выглядит именно так:
+                [
+                    {"role": "system", "content": system_prompt},  # Ваш промпт для СОВЫ
+                    {"role": "user", "content": user_message}
+                ]
+            )
 
-    try:
-        # 1. Делаем первый быстрый запрос к Ollama (благодаря 'sova' промпт уже в кэше GPU!)
-        ai_message = await llm.ainvoke([("human", user_message)])
+            # 2. Проверяем, хочет ли модель вызвать инструмент
+            if ai_message.tool_calls:
+                for tool_call in ai_message.tool_calls:
+                    log.info("Сова вызывает инструмент: %s", tool_call["name"])
 
-        # 2. Проверяем, хочет ли модель вызвать инструмент
-        if ai_message.tool_calls:
-            for tool_call in ai_message.tool_calls:
-                log.info("Сова вызывает инструмент: %s", tool_call["name"])
+                    # Ищем нужную функцию в нашем списке инструментов
+                    tool_func = next(
+                        (t for t in tools if getattr(t, "name", getattr(t, "__name__", None)) == tool_call["name"]), None)
+                    if tool_func:
+                        # Выполняем инструмент локально
+                        tool_output, is_direct_answer = tool_func.invoke(tool_call["args"])
 
-                # Ищем нужную функцию в нашем списке инструментов
-                tool_func = next((t for t in tools if getattr(t, "name", getattr(t, "__name__", None)) == tool_call["name"]), None)
-                if tool_func:
-                    # Выполняем инструмент локально
-                    tool_output, is_direct_answer = tool_func.invoke(tool_call["args"])
-
-                    if is_direct_answer is True:
-                        res = tool_output
+                        if is_direct_answer is True:
+                            res = tool_output
+                        else:
+                            # Отправляем результат обратно модели для финального ответа
+                            final_response = await llm.ainvoke([
+                                {"role": "system", "content": system_prompt},  # Ваш промпт для СОВЫ
+                                {"role": "user", "content": user_message},
+                                ai_message,
+                                {"role": "tool", "content": str(tool_output), "tool_call_id": tool_call["id"]}
+                            ])
+                            res = final_response.content
                     else:
-                        # Отправляем результат обратно модели для финального ответа
-                        final_response = await llm.ainvoke([
-                            ("system", structured_system_prompt),
-                            ("human", user_message),
-                            ai_message,
-                            {"role": "tool", "content": str(tool_output), "tool_call_id": tool_call["id"]}
-                        ])
-                        res = final_response.content
-                else:
-                    res = "Инструмент не найден"
-        else:
-            # Если инструменты не нужны, берем прямой ответ модели
-            res = ai_message.content
+                        res = "Инструмент не найден"
+            else:
+                # Если инструменты не нужны, берем прямой ответ модели
+                res = ai_message.content
 
-    except Exception as e:
-        log.error("Ошибка инференса Совы: %s", e)
-        return "Не удалось обработать запрос"
+        except Exception as e:
+            log.error("Ошибка инференса Совы: %s", e)
+            return "Не удалось обработать запрос"
 
     # --- Твоя постобработка текста для TTS ---
     res = re.sub(r'[\u4e00-\u9fff]+', '', res)  # убираем иероглифы
@@ -102,9 +106,6 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
         res = res.replace(symbol, '')
 
     log.info("--> Ответ: %s", res)
-
-    if res.strip():
-        await send_to_tts(res)
     return res
 
 
@@ -112,6 +113,15 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
 async def main():
     """Запуск тестовых запросов."""
     questions = [
+        "тост!",
+        "скажи тост!!!",
+        "скажи тост за Макса",
+        "скажи тост за команду",
+        "скажи тост, бля",
+        "бля",
+        "мудрый олень пиявка",
+        "почему трава зеленая?",
+        "ты невесомый дебил?",
         "пошути",
         "косинус пи пополам",
         "косинус девяносто градусов",

@@ -137,11 +137,12 @@ class RussianExpressionLanguageDetector:
         """
         return text.lower().replace("ё", "е")
 
-expression_detector = RussianExpressionLanguageDetector()
 
 # -------------------  Пример использования  -------------------
 if __name__ == "__main__":
     from pprint import pprint
+
+    expression_detector = RussianExpressionLanguageDetector()
 
     sample = """
         Ты чего, блядь, опять баг в прод выкатил?

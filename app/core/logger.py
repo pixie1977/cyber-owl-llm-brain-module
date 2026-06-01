@@ -21,7 +21,7 @@ formatter = logging.Formatter(
 )
 
 # Создаём ротационный хендлер (до 5 файлов по 10 МБ)
-handler = RotatingFileHandler(LOG_FILE_PATH, maxBytes=10 * 1024 * 1024, backupCount=5)
+handler = RotatingFileHandler(LOG_FILE_PATH, maxBytes=10 * 1024 * 1024, backupCount=5, encoding='utf-8')
 handler.setFormatter(formatter)
 
 # Настраиваем корневой логгер

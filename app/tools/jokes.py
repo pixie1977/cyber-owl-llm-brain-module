@@ -71,7 +71,7 @@ def get_joke() -> str:
 
 
 @tool
-def get_random_joke(**kwargs) -> tuple[str, bool]:
+def joke_tool(**kwargs) -> tuple[str, bool]:
     """
     Возвращает случайную шутку. Вызывается, когда пользователь просит пошутить.
 

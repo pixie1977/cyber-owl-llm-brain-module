@@ -25,7 +25,7 @@ def get_time() -> str:
 
 
 @tool
-def get_current_time_as_str(**kwargs) -> tuple[str, bool]:
+def time_tool(**kwargs) -> tuple[str, bool]:
     """
     Возвращает текущее время словами на русском языке.
 
