@@ -149,7 +149,7 @@ class Behaviour:
         if not response:
             response = self.common_vector_search.find_answer(query)
 
-        if not response:
+        if not response or response == "None":
             response = await process_request_with_llm(
                 item.get("query"),
                 item.get("expression"),
