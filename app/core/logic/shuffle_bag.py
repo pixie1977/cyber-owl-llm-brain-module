@@ -3,9 +3,11 @@ from __future__ import annotations
 import random
 from typing import List, Iterator, TypeVar
 
+from networkx.classes import is_empty
+
 T = TypeVar('T')
 
-class ShuffleBag(Iterator[T]):
+class ShuffleBag():
     """
     Итератор-«шляпа»: каждый элемент списка выпадает ровно один раз за цикл.
     Как только шляпа опустела, она автоматически перетасовывается заново.
@@ -18,32 +20,23 @@ class ShuffleBag(Iterator[T]):
 
     Таким образом каждый элемент гарантированно будет встречаться ровно один раз за «раунд», а порядок выдачи в каждом раунде остаётся случайным.
     """
-    def __init__(self, items: List[T], *, rng: random.Random | None = None):
+
+    def __init__(self, items: List[str]):
         if not items:
-            raise ValueError("Нужен непустой список items")
-        self._items: List[T] = list(items)
-        self._bag: List[T]  = []          # текущее содержимое «шляпы»
-        self._rng           = rng or random.SystemRandom()
-        self._reshuffle()                 # первый раз заполняем шляпу
+            raise ValueError("ShuffleBag не может быть инициализирован пустым списком")
+        self._items = items.copy()
+        self._reset()
 
-    def _reshuffle(self) -> None:
-        """Перемешиваем элементы и кладём в шляпу снова."""
-        self._bag = self._items[:]        # копия исходного списка
-        self._rng.shuffle(self._bag)
+    def _reset(self) -> None:
+        random.shuffle(self._items)
+        self._used: List[str] = []
 
-    # —–– стандартные методы Python-итератора –––––––––––––––––––––––
-    def __iter__(self) -> "ShuffleBag[T]":
-        return self
-
-    def __next__(self) -> T:
-        if not self._bag:                 # опустела — перемешиваем заново
-            self._reshuffle()
-        return self._bag.pop()            # забираем «верхний» элемент
-
-    # —–– удобный метод «возьми один» –––––––––––––––––––––––––––––––
-    def pick(self) -> T:
-        """Эквивалентно next(bag), но читается понятнее."""
-        return next(self)
+    def pick(self) -> str:
+        if not self._items or len(self._items) == 0:
+            self._reset()
+        item = self._items.pop()
+        self._used.append(item)
+        return item
 
 
 # Пример использования ---------------------------------------------------------

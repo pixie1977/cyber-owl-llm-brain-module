@@ -1,4 +1,4 @@
-from app.utils.shuffle_bag import ShuffleBag
+from app.core.logic.shuffle_bag import ShuffleBag
 
 GREETENGS_SHUFFLE = None
 

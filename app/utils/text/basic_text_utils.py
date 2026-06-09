@@ -1,15 +1,30 @@
 """
 Утилиты для обработки текста, извлечения чисел и очистки результатов.
 """
-
+import random
 import re
 from fuzzywuzzy import fuzz
 
 from app.core.logger import get_logger
+from app.core.logic.shuffle_bag import ShuffleBag
 from app.utils.text.time_to_words import time_to_text
 
 
 log = get_logger(__name__)
+
+def process_answer(raw_answer)-> str:
+    if isinstance(raw_answer, list):
+        index = random.randint(0, len(raw_answer) - 1)
+        return raw_answer[index]
+    elif isinstance(raw_answer, str):
+        return raw_answer
+    elif type(raw_answer) == ShuffleBag:
+        return raw_answer.pick()
+    elif callable(raw_answer):
+        return str(raw_answer())
+    else:
+        return str(raw_answer)
+
 
 def filter_text_math(input_str: str) -> str:
     """
@@ -140,5 +155,5 @@ def find_and_crop_by_keywords(key_words: list, text: str, threshold: int = 60) -
                 cropped_text_local = ' '.join(cropped_words)
                 return cropped_text_local
 
-    log.info(f'Совпадений ключевых слов не найдено. Запрос не рассматривается. Запрос:{text}')
+    log.info(f'Совпадений ключевых слов не найдено. Запрос не рассматривается LLM. Запрос:{text}')
     return ""

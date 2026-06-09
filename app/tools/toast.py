@@ -3,19 +3,14 @@
 """
 
 import logging
-import os
 
 from langchain_core.tools import tool
 
-from app.core.logger import get_logger
-from app.utils.shuffle_bag import ShuffleBag
-from tests.test_qdrant_indexation import test_load_single_txt_into_qdrant
+from app.core.logic.shuffle_bag import ShuffleBag
 
 # Настройка логирования
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-
-import random
 
 # 0. Мощные айтишные междометия для старта
 prefixes_bag = ShuffleBag([
@@ -93,14 +88,10 @@ def get_toast(personality_name: str = "") -> str:
         personality_res = "за нас, углеродных гениев цифровой эпохи! "
     else:
         # Если передано имя (Макс, Санек и т.д.)
-        personality_res = f"лично за то, чтобы у нашего {target} баланс карты рос быстрее, чем стек технологий! "
+        personality_res = f"лично за то, чтобы у нашего {target} завтра было лучше, чем вчера! "
 
     # Сборка мега-тоста
     toast = (
-        f"{prefixes_bag.pick()}"
-        f"{starts_bag.pick()}"
-        f"{history_bag.pick()} "
-        f"{intrigue_bag.pick()} \n\n"
         f"Поднимаю бокал {personality_res}"
         f"{prestige_bag.pick()}"
     )

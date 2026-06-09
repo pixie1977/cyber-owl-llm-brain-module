@@ -2,7 +2,7 @@
 Модуль с шаблонами бранных фраз для генерации случайных оскорбительных реплик.
 """
 
-from app.utils.shuffle_bag import ShuffleBag
+from app.core.logic.shuffle_bag import ShuffleBag
 
 
 # Шаблоны агрессивных/жаргонных фраз с подстановкой слов

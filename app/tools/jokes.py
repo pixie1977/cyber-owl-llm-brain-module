@@ -7,7 +7,7 @@ import os
 
 from langchain_core.tools import tool
 
-from app.utils.shuffle_bag import ShuffleBag
+from app.core.logic.shuffle_bag import ShuffleBag
 
 # Настройка логирования
 logging.basicConfig()

@@ -1,4 +1,4 @@
-from app.utils.shuffle_bag import ShuffleBag
+from app.core.logic.shuffle_bag import ShuffleBag
 
 _MERO_REMARKS_FAIL = [
     "Какая пикантная некомпет+ентность! Причина ничтожна, но эффект — великолепно катастрофичен.",

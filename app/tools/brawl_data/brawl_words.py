@@ -4,7 +4,7 @@
 
 import re
 
-from app.utils.shuffle_bag import ShuffleBag
+from app.core.logic.shuffle_bag import ShuffleBag
 
 agressive_words_txt = """
 Ащеул,

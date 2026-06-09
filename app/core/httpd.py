@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.config.config import MBB_DOC_ROOT
 from app.core.behaviour import Behaviour
-from app.core.data import TextRequest, FaceDetection
+from app.core.data.data import TextRequest, FaceDetection
 from app.core.logger import get_logger
 
 # --- Настройка логирования ---

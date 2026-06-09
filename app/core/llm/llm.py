@@ -11,8 +11,8 @@ from langchain_ollama import ChatOllama
 
 from app.config.config import MBB_OLLAMA_MODEL_NAME
 from app.core.logger import get_logger
-from app.core.promts import system_prompt
-from app.tools.brawl import get_mat_count, trigger_vicious_response, trigger_violent_mode
+from app.core.llm.promts import system_prompt
+from app.tools.brawl import get_mat_count, trigger_vicious_response, trigger_violent_mode, not_understand_this
 from app.tools.jokes import joke_tool
 from app.tools.math import math_tool
 from app.tools.qdrant import search_knowledge_base
@@ -31,6 +31,7 @@ tools = [
     search_knowledge_base,
     joke_tool,
     toast_tool,
+    not_understand_this,
 ]
 
 # --- Настройка модели Ollama ---
