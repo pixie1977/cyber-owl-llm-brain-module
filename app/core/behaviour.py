@@ -177,7 +177,6 @@ class Behaviour:
             threshold=80,
         )
 
-        latest_question = question
         is_not_echo = bool(similarity_ratio(question, latest_response or "") < 0.5)
 
         if not question and is_not_echo:
@@ -192,6 +191,7 @@ class Behaviour:
         if not question:
             return
 
+        latest_question = question
         if is_not_echo:
             await self.query_queue.put({"query": question, "expression": expression})
 
