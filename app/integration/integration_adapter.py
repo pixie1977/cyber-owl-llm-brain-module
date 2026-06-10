@@ -20,7 +20,7 @@ MAT_DETECTED_RW_DOWN = {"hv": 100, "hh": 16, "lw": 55, "rw": 0}
 MAT_DETECTED_END = {"hv": 50, "hh": 50, "lw": 55, "rw": 50}
 
 LW_UP = {"hv": 100, "hh": 50, "lw": 100, "rw": 55}
-LW_DOWN = {"hv": 100, "hh": 50, "lw": 0, "rw": 55}
+LW_DOWN = {"hv": 50, "hh": 50, "lw": 0, "rw": 55}
 
 
 async def send_to_tts(text: str) -> None:
