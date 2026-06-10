@@ -176,7 +176,11 @@ class Behaviour:
             text=raw_question,
             threshold=80,
         )
-        if not question:
+
+        latest_question = question
+        is_not_echo = bool(similarity_ratio(question, latest_response or "") < 0.5)
+
+        if not question and is_not_echo:
             # Если вопрос не содержит интересующих нас фраз, но содержит маркеры реакции
             response = self.common_vector_search.find_answer(raw_question)
             if response.strip():
@@ -185,8 +189,10 @@ class Behaviour:
                 await send_to_tts(response)
             return
 
-        latest_question = question
-        if similarity_ratio(question, latest_response or "") < 0.5:
+        if not question:
+            return
+
+        if is_not_echo:
             await self.query_queue.put({"query": question, "expression": expression})
 
     # ——— Обработка лиц ———
