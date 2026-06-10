@@ -177,9 +177,9 @@ class Behaviour:
             threshold=80,
         )
 
-        is_not_echo = bool(similarity_ratio(question, latest_response or "") < 0.5)
+        is_not_echo = bool(similarity_ratio(raw_question, latest_response or "") < 0.5)
 
-        log.info(f"Последний ответ был: {latest_response}. Текущий вопрос: {question}. Проверка на эхо: {is_not_echo} ",)
+        log.info(f"Последний ответ был: {latest_response}. Текущий вопрос: {raw_question}. Проверка на эхо: {is_not_echo} ",)
 
         if not question and is_not_echo:
             # Если вопрос не содержит интересующих нас фраз, но содержит маркеры реакции
