@@ -37,11 +37,15 @@ tools = [
 # --- Настройка модели Ollama ---
 # инструменты подключаем напрямую
 # ландграф убивает кэш и производительность джетсона
+# Инициализируем модель с фиксом зацикливания
 llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
-    temperature=0.01,
+    temperature=0.2,
     base_url="http://localhost:11434",
-    num_ctx=4096,
+    num_ctx=2048,
+    model_kwargs={
+        "repeat_penalty": 1.2, # Защита от повторения фраз
+    }
 ).bind_tools(tools)
 
 log.info("Модель LLM инициализирована: %s", llm.model)

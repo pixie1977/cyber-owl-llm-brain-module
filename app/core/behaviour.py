@@ -17,6 +17,7 @@ from app.integration.integration_adapter import (
 )
 from app.tools.brawl import get_mat_count, trigger_violent_mode
 from app.tools.common_data.context_common import get_common_context
+from app.tools.common_data.context_psychology import get_psychology_phrase
 from app.tools.greetengs import get_greetengs
 from app.core.logic.shuffle_bag import ShuffleBag
 from app.utils.text.basic_text_utils import find_and_crop_by_keywords
@@ -96,6 +97,7 @@ class Behaviour:
         self.state: State = State.SLEEPING
         self.is_running = False
         self._thread: Optional[threading.Thread] = None
+        self.counter: int = 0
 
     # ——— Основной цикл ———
     async def _loop(self) -> None:
@@ -108,7 +110,14 @@ class Behaviour:
                     self.state = State.READY
 
                 elif self.state == State.READY:
-                    await self._try_transition_from_ready()
+                    res = self._try_transition_from_ready()
+                    self.counter += res
+                    if res == 0:
+                        self.counter = 0
+                    if self.counter > 600:
+                        await send_to_tts(get_psychology_phrase())
+                    if res > 0:
+                        await asyncio.sleep(0.5)
 
                 elif self.state == State.ANSWERING:
                     item = await self.query_queue.get()
@@ -124,14 +133,16 @@ class Behaviour:
                 log.error("Ошибка в поведенческом цикле: %s", e)
                 await asyncio.sleep(0.5)
 
-    async def _try_transition_from_ready(self) -> None:
+    def _try_transition_from_ready(self) -> int:
         """Переход из READY в ANSWERING или IMAGE_REACTION."""
         if not self.query_queue.empty():
             self.state = State.ANSWERING
+            return 0
         elif not self.img_queue.empty():
             self.state = State.IMAGE_REACTION
+            return 0
         else:
-            await asyncio.sleep(0.5)
+            return 1
 
     # ——— Обработка запросов ———
     async def _process_user_query(self, item: Dict[str, Any]) -> None:
