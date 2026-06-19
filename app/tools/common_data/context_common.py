@@ -2,6 +2,7 @@ import logging
 import os
 
 from app.core.logic.shuffle_bag import ShuffleBag
+from app.tools.jokes import get_joke
 from app.utils.utils import Utils
 
 CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -11,28 +12,10 @@ logging.basicConfig()
 log = logging.getLogger()
 log.setLevel(logging.INFO)
 
-JOKES_SHUFFLE = None
 GREETENGS_SHUFFLE = None
 SHUT_UP_SHUFFLE = None
 GET_LOST_SHUFFLE = None
 HOW_ARE_YOU = None
-
-def load_jokes():
-    jokes_phrases = []
-    log.info('Загружаем шутки...')
-    jokes_path = os.path.join(CURRENT_DIRECTORY, '../../resources/jokes.txt')
-    with open(jokes_path, 'r', encoding='utf-8') as infile:
-        for line in infile:
-            jokes_phrases.append(line.replace('\n', ''))
-    log.info(jokes_phrases)
-    return ShuffleBag(jokes_phrases)
-
-
-def update_jokes():
-    global JOKES_SHUFFLE
-    if JOKES_SHUFFLE is None:
-        JOKES_SHUFFLE = load_jokes()
-    return JOKES_SHUFFLE.pick()
 
 
 def shut_up():
@@ -50,13 +33,6 @@ def shut_up():
             "Молчите сами ‒ получите тишину в подарок!"
         ]))
     return SHUT_UP_SHUFFLE.pick()
-
-
-def get_joke():
-    global JOKES_SHUFFLE
-    if JOKES_SHUFFLE is None:
-        update_jokes()
-    return JOKES_SHUFFLE.pick()
 
 
 def get_greetengs():
