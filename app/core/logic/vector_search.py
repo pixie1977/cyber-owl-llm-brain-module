@@ -34,7 +34,7 @@ class VectorSearch:
             similarity_score = similarities[0][most_similar_index]
         s_answer = ""
         try:
-            if similarity_score > 0.8:
+            if similarity_score > 0.9:
                 s_answer = self._answers[most_similar_index]
             else:
                 s_answer = None

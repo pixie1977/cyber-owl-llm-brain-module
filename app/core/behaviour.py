@@ -30,10 +30,37 @@ log = get_logger(__name__)
 # --- Глобальные переменные ---
 latest_question: Optional[str] = None
 latest_response: Optional[str] = None
+last_user_question: Optional[str] = None  # Для корректной эхо-проверки
 
 # --- Константы времени (секунды) ---
 GREETING_COOLDOWN_SECONDS = 600  # 10 минут между обычными фразами
 DAILY_COOLDOWNS_SECONDS = 86400  # 24 часа для "ежедневных" событий (заготовка на будущее)
+VECTOR_PHRASE_COOLDOWN_SECONDS = 300  # 5 минут между повторением фраз из векторного поиска
+VECTOR_SIMILARITY_THRESHOLD = 0.9  # Повышенный порог для векторного поиска
+
+# --- История произнесённых фраз ---
+_recent_phrases: list = []  # [(phrase, timestamp), ...]
+_MAX_RECENT_PHRASES = 20
+
+
+def _is_phrase_recent(phrase: str, cooldown: float = VECTOR_PHRASE_COOLDOWN_SECONDS) -> bool:
+    """Проверяет, не произносилась ли уже эта фраза недавно."""
+    current_time = time.time()
+    _recent_phrases[:] = [
+        (p, t) for p, t in _recent_phrases
+        if current_time - t < cooldown
+    ]
+    for p, _ in _recent_phrases:
+        if similarity_ratio(phrase, p) > 0.85:
+            return True
+    return False
+
+
+def _record_phrase(phrase: str) -> None:
+    """Добавляет фразу в историю произнесённых."""
+    _recent_phrases.append((phrase, time.time()))
+    if len(_recent_phrases) > _MAX_RECENT_PHRASES:
+        _recent_phrases.pop(0)
 
 
 # --- Список персонажей ---
@@ -50,9 +77,11 @@ PERSONALITIES: List[Dict[str, Any]] = [
             "Мастер, пусть у тебя всё сложится сегодня."
         ],
         "phrases": [
-            "Мастер, всех и всегда посылай в звезду. И не жди, пока тебя пошлют на хер.",
+            "Мастер, всех и всегда посылай в манду. И не жди, пока тебя пошлют н+а хер.",
             "Мастер! Не унывай!",
             "Ты можешь сделать это.",
+            "Женя, сколько будет пятью пять?",
+            "Сам ты чучело!"
         ],
     },
     {
@@ -174,7 +203,7 @@ class Behaviour:
 
     async def post_user_query(self, request: str) -> None:
         """Обрабатывает и ставит в очередь пользовательский запрос."""
-        global latest_question, latest_response
+        global latest_question, latest_response, last_user_question
 
         raw_question = request.strip()
         expression = self.expression_detector.analyze(raw_question)
@@ -184,21 +213,29 @@ class Behaviour:
 
         # Очистка от ключевых слов
         question = find_and_crop_by_keywords(
-            key_words=["совушка", "совунья", "чувырло", "чучело"],
+            key_words=["камрад", "камрат", "шалунья", "совушка", "совунья", "чувырло", "чучело"],
             text=raw_question,
             threshold=80,
         )
 
-        is_not_echo = bool(similarity_ratio(raw_question, latest_response or "") < 0.5)
+        # Эхо-проверка: сравниваем текущий вопрос с ПОСЛЕДНИМ вопросом пользователя,
+        # а не с ответом бота — это предотвращает сброс при векторном поиске
+        is_not_echo = bool(similarity_ratio(raw_question, last_user_question or "") < 0.5)
 
-        log.info(f"Последний ответ был: {latest_response}. Текущий вопрос: {raw_question}. Проверка на эхо: {is_not_echo} ",)
+        log.info(f"Последний вопрос: {last_user_question}. Текущий вопрос: {raw_question}. Проверка на эхо: {is_not_echo}")
 
         if not question and is_not_echo:
-            # Если вопрос не содержит интересующих нас фраз, но содержит маркеры реакции
+            # Если вопрос не содержит интересующих нас фраз, проверяем векторный поиск
             response = self.common_vector_search.find_answer(raw_question)
-            if response.strip():
+            if response and response.strip() and response != "None":
+                # Проверяем, не произносили ли уже эту фразу недавно
+                if _is_phrase_recent(response):
+                    log.info(f"Фраза уже произносилась недавно, пропускаем: {response}")
+                    return
                 log.info(f"Совпадение по быстрому векторному поиску!")
                 latest_response = response
+                last_user_question = raw_question
+                _record_phrase(response)
                 await send_to_tts(response)
             return
 
@@ -206,6 +243,7 @@ class Behaviour:
             return
 
         latest_question = question
+        last_user_question = raw_question
         if is_not_echo:
             await self.query_queue.put({"query": question, "expression": expression})
 
