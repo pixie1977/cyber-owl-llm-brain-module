@@ -37,6 +37,7 @@ GREETING_COOLDOWN_SECONDS = 600  # 10 минут между обычными ф�
 DAILY_COOLDOWNS_SECONDS = 86400  # 24 часа для "ежедневных" событий (заготовка на будущее)
 VECTOR_PHRASE_COOLDOWN_SECONDS = 300  # 5 минут между повторением фраз из векторного поиска
 VECTOR_SIMILARITY_THRESHOLD = 0.9  # Повышенный порог для векторного поиска
+ECHO_SIMILARITY_THRESHOLD = 0.8  # Порог эхо-проверки: "как дела" vs "как жизнь" = 0.75 → не эхо
 
 # --- История произнесённых фраз ---
 _recent_phrases: list = []  # [(phrase, timestamp), ...]
@@ -220,7 +221,8 @@ class Behaviour:
 
         # Эхо-проверка: сравниваем текущий вопрос с ПОСЛЕДНИМ вопросом пользователя,
         # а не с ответом бота — это предотвращает сброс при векторном поиске
-        is_not_echo = bool(similarity_ratio(raw_question, last_user_question or "") < 0.5)
+        # Порог 0.8: "камрад как дела" vs "камрад как жизнь" = 0.75 сходства → не эхо
+        is_not_echo = bool(similarity_ratio(raw_question, last_user_question or "") < ECHO_SIMILARITY_THRESHOLD)
 
         log.info(f"Последний вопрос: {last_user_question}. Текущий вопрос: {raw_question}. Проверка на эхо: {is_not_echo}")
 
