@@ -37,7 +37,7 @@ GREETING_COOLDOWN_SECONDS = 600  # 10 минут между обычными ф�
 DAILY_COOLDOWNS_SECONDS = 86400  # 24 часа для "ежедневных" событий (заготовка на будущее)
 VECTOR_PHRASE_COOLDOWN_SECONDS = 300  # 5 минут между повторением фраз из векторного поиска
 VECTOR_SIMILARITY_THRESHOLD = 0.9  # Повышенный порог для векторного поиска
-ECHO_SIMILARITY_THRESHOLD = 0.8  # Порог эхо-проверки: "как дела" vs "как жизнь" = 0.75 → не эхо
+ECHO_SIMILARITY_THRESHOLD = 0.9  # Порог эхо-проверки: "как дела" vs "как жизнь" = 0.75 → не эхо
 
 # --- История произнесённых фраз ---
 _recent_phrases: list = []  # [(phrase, timestamp), ...]
