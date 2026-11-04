@@ -222,7 +222,7 @@ class Behaviour:
         # Эхо-проверка: сравниваем текущий вопрос с ПОСЛЕДНИМ вопросом пользователя,
         # а не с ответом бота — это предотвращает сброс при векторном поиске
         # Порог 0.8: "камрад как дела" vs "камрад как жизнь" = 0.75 сходства → не эхо
-        is_not_echo = bool(similarity_ratio(raw_question, last_user_question or "") < ECHO_SIMILARITY_THRESHOLD)
+        is_not_echo = False #bool(similarity_ratio(raw_question, last_user_question or "") < ECHO_SIMILARITY_THRESHOLD)
 
         log.info(f"Последний вопрос: {last_user_question}. Текущий вопрос: {raw_question}. Проверка на эхо: {is_not_echo}")
 
