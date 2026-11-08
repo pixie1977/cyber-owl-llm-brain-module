@@ -150,9 +150,9 @@ def find_and_crop_by_keywords(key_words: list, text: str, threshold: int = 60) -
         if res:
             for pos, frag, sc in res:
                 log.debug(f'  "{frag}" (позиция {pos}, сходство {sc}%)')
-                words = re.findall(r'[а-яё]+', text)
-                cropped_words = words[pos+1:]
-                cropped_text_local = ' '.join(cropped_words)
+                # Не создаём полный список слов из текста — это растрачивает память.
+                # Вместо этого: берём текст от найденного фрагмента до конца.
+                cropped_text_local = text[pos + len(frag):].strip()
                 return cropped_text_local
 
     log.info(f'Совпадений ключевых слов не найдено. Запрос не рассматривается LLM. Запрос:{text}')

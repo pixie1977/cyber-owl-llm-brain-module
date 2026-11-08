@@ -1,4 +1,6 @@
 import asyncio
+import gc
+import os
 import time
 import threading
 from enum import Enum
@@ -23,6 +25,10 @@ from app.core.logic.shuffle_bag import ShuffleBag
 from app.utils.text.basic_text_utils import find_and_crop_by_keywords
 from app.utils.text.expression_language_detector import RussianExpressionLanguageDetector
 from app.utils.text.levenstein_text_utils import similarity_ratio
+
+# --- Мониторинг памяти ---
+_MEMORY_WARN_THRESHOLD_MB = 500  # предупреждение при >500MB
+_last_mem_warn_request = 0  # для throttle предупреждений
 
 # --- Настройка логирования ---
 log = get_logger(__name__)
@@ -62,6 +68,32 @@ def _record_phrase(phrase: str) -> None:
     _recent_phrases.append((phrase, time.time()))
     if len(_recent_phrases) > _MAX_RECENT_PHRASES:
         _recent_phrases.pop(0)
+
+
+def _check_memory() -> None:
+    """Проверяет использование памяти и логгирует предупреждение при превышении порога."""
+    global _last_mem_warn_request
+    try:
+        import resource
+        usage_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
+        if usage_mb > _MEMORY_WARN_THRESHOLD_MB:
+            now = time.time()
+            if now - _last_mem_warn_request > 60:  # throttle: раз в минуту
+                log.warning(f"Использование памяти: {usage_mb}MB (порог: {_MEMORY_WARN_THRESHOLD_MB}MB)")
+                _last_mem_warn_request = now
+    except (ImportError, AttributeError):
+        # resource не доступен на Windows
+        try:
+            import psutil
+            proc = psutil.Process(os.getpid())
+            usage_mb = proc.memory_info().rss // (1024 * 1024)
+            if usage_mb > _MEMORY_WARN_THRESHOLD_MB:
+                now = time.time()
+                if now - _last_mem_warn_request > 60:
+                    log.warning(f"Использование памяти: {usage_mb}MB (порог: {_MEMORY_WARN_THRESHOLD_MB}MB)")
+                    _last_mem_warn_request = now
+        except ImportError:
+            pass
 
 
 # --- Список персонажей ---
@@ -206,6 +238,9 @@ class Behaviour:
         """Обрабатывает и ставит в очередь пользовательский запрос."""
         global latest_question, latest_response, last_user_question
 
+        # Принудительная сборка мусора перед обработкой
+        gc.collect()
+
         raw_question = request.strip()
         expression = self.expression_detector.analyze(raw_question)
         mat_count = get_mat_count(expression)
@@ -239,6 +274,9 @@ class Behaviour:
                 last_user_question = raw_question
                 _record_phrase(response)
                 await send_to_tts(response)
+            # Очистка после векторного поиска
+            del response
+            gc.collect()
             return
 
         if not question:
@@ -248,6 +286,9 @@ class Behaviour:
         last_user_question = raw_question
         if is_not_echo:
             await self.query_queue.put({"query": question, "expression": expression})
+
+        # Мониторинг памяти после обработки запроса
+        _check_memory()
 
     # ——— Обработка лиц ———
     async def _process_image(self, faces: List[FaceDetection]) -> None:

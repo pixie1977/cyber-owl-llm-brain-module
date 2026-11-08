@@ -29,15 +29,13 @@ class VectorSearch:
         new_question_vector = self._vectorizer.transform([question])
         similarities = cosine_similarity(new_question_vector, self._vectorized_questions)
         most_similar_index = np.argmax(similarities)
-        similarity_score = 0
-        if most_similar_index > 0:
-            similarity_score = similarities[0][most_similar_index]
+        similarity_score = similarities[0][most_similar_index]
         s_answer = ""
         try:
             if similarity_score > 0.9:
                 s_answer = self._answers[most_similar_index]
             else:
                 s_answer = None
-        except BaseException  as e:
+        except BaseException as e:
             print(e)
         return process_answer(s_answer)

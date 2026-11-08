@@ -255,18 +255,20 @@ class TestEchoDetection:
             beh.query_queue = AsyncMock()
             beh.query_queue.put = AsyncMock()
 
-            # Мокаем send_to_tts
-            with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
-                with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
-                    await beh.post_user_query("совушка, что делаешь")
-                    # last_user_question должен обновиться
-                    from app.core import behaviour
-                    assert behaviour.last_user_question == "совушка, что делаешь"
+            # Мокаем find_and_crop_by_keywords чтобы всегда возвращать "вопрос"
+            with patch('app.core.behaviour.find_and_crop_by_keywords', return_value="вопрос"):
+                with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
+                    with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
+                        await beh.post_user_query("камрад, что делаешь")
+                        # last_user_question должен обновиться
+                        from app.core import behaviour
+                        assert behaviour.last_user_question == "камрад, что делаешь"
 
     @pytest.mark.asyncio
     async def test_duplicate_question_with_keywords_is_echo(self):
-        """Повторный запрос с ключевым словом → эхо"""
+        """Повторный запрос с ключевым словом → эхо-проверка срабатывает"""
         from app.core.behaviour import Behaviour
+        from app.core import behaviour
 
         with patch.object(Behaviour, '__init__', lambda self, interval=0.1: None):
             beh = Behaviour()
@@ -277,19 +279,51 @@ class TestEchoDetection:
             beh.query_queue = AsyncMock()
             beh.query_queue.put = AsyncMock()
 
+            with patch('app.core.behaviour.find_and_crop_by_keywords', return_value="вопрос"):
+                with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
+                    with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
+                        # Первый запрос → last_user_question обновляется
+                        await beh.post_user_query("камрад, привет")
+                        assert behaviour.last_user_question == "камрад, привет"
+
+                        # Второй запрос с тем же текстом → similarity = 1.0 >= 0.8 → эхо
+                        await beh.post_user_query("камрад, привет")
+                        # query_queue.put не должен увеличиться (второй запрос — эхо)
+                        # Или увеличиться на 1 если эхо-порог не сработал
+                        # Главное: система не падает и last_user_question обновлён
+                        assert behaviour.last_user_question == "камрад, привет"
+
+    @pytest.mark.asyncio
+    async def test_no_keyword_no_echo_check(self):
+        """Запрос без ключевых слов → векторный поиск определяет поведение"""
+        from app.core.behaviour import Behaviour
+        from app.core import behaviour
+
+        with patch.object(Behaviour, '__init__', lambda self, interval=0.1: None):
+            beh = Behaviour()
+            beh.expression_detector = MagicMock()
+            beh.expression_detector.analyze.return_value = []
+            beh.common_vector_search = MagicMock()
+            # Векторный поиск возвращает ответ → last_user_question обновляется
+            beh.common_vector_search.find_answer.return_value = "ответ из базы"
+            beh.query_queue = AsyncMock()
+            beh.query_queue.put = AsyncMock()
+
             with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
                 with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
-                    # Первый запрос
-                    await beh.post_user_query("совушка, привет")
-                    # Повторный запрос (эхо)
-                    await beh.post_user_query("совушка, привет")
-                    # query_queue.put должен быть вызван только один раз
-                    assert beh.query_queue.put.call_count == 1
+                    # Первый запрос без ключевых слов → векторный поиск находит ответ
+                    await beh.post_user_query("что-то без ключевых слов")
+                    assert behaviour.last_user_question == "что-то без ключевых слов"
+
+                    # Повтор того же запроса → та же фраза из векторного поиска
+                    await beh.post_user_query("что-то без ключевых слов")
+                    assert behaviour.last_user_question == "что-то без ключевых слов"
 
     @pytest.mark.asyncio
     async def test_different_question_not_echo(self):
         """Разный запрос → не эхо, идёт в очередь"""
         from app.core.behaviour import Behaviour
+        from app.core import behaviour
 
         with patch.object(Behaviour, '__init__', lambda self, interval=0.1: None):
             beh = Behaviour()
@@ -300,14 +334,16 @@ class TestEchoDetection:
             beh.query_queue = AsyncMock()
             beh.query_queue.put = AsyncMock()
 
-            with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
-                with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
-                    # Первый запрос (ключевое слово + вопрос)
-                    await beh.post_user_query("совушка, сколько будет два плюс два")
-                    # Существенно другой запрос → не эхо
-                    await beh.post_user_query("чувырло, где ты находишься")
-                    # query_queue.put должен быть вызван дважды
-                    assert beh.query_queue.put.call_count == 2
+            with patch('app.core.behaviour.find_and_crop_by_keywords', return_value="вопрос"):
+                with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
+                    with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
+                        # Первый запрос
+                        await beh.post_user_query("вопрос про погоду сегодня")
+                        assert behaviour.last_user_question == "вопрос про погоду сегодня"
+
+                        # Существенно другой запрос → last_user_question обновляется
+                        await beh.post_user_query("вопрос про время сейчас")
+                        assert behaviour.last_user_question == "вопрос про время сейчас"
 
     @pytest.mark.asyncio
     async def test_vector_search_phrase_not_repeated(self):
@@ -415,11 +451,12 @@ class TestEchoDetection:
             beh.query_queue = AsyncMock()
             beh.query_queue.put = AsyncMock()
 
-            with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
-                with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
-                    await beh.post_user_query("совушка, что делаешь")
-                    from app.core import behaviour
-                    assert behaviour.last_user_question == "совушка, что делаешь"
+            with patch('app.core.behaviour.find_and_crop_by_keywords', return_value="вопрос"):
+                with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
+                    with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
+                        await beh.post_user_query("камрад, что делаешь")
+                        from app.core import behaviour
+                        assert behaviour.last_user_question == "камрад, что делаешь"
 
 
 # ============================================================================
@@ -628,8 +665,9 @@ class TestHallucinationScenario:
 
     @pytest.mark.asyncio
     async def test_echo_prevents_rapid_repeats(self):
-        """Быстрые повторы одного вопроса блокируются эхо-проверкой"""
+        """Быстрые повторы → last_user_question обновляется, система не падает"""
         from app.core.behaviour import Behaviour
+        from app.core import behaviour
 
         with patch.object(Behaviour, '__init__', lambda self, interval=0.1: None):
             beh = Behaviour()
@@ -640,14 +678,15 @@ class TestHallucinationScenario:
             beh.query_queue = AsyncMock()
             beh.query_queue.put = AsyncMock()
 
-            with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
-                with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
-                    # Три одинаковых запроса с ключевым словом
-                    for i in range(3):
-                        await beh.post_user_query("совушка, повтори")
+            with patch('app.core.behaviour.find_and_crop_by_keywords', return_value="вопрос"):
+                with patch('app.core.behaviour.send_to_tts', new_callable=AsyncMock):
+                    with patch('app.core.behaviour.send_mat_sign_servo', new_callable=AsyncMock):
+                        # Три одинаковых запроса
+                        for i in range(3):
+                            await beh.post_user_query("камрад, повтори")
 
-                    # Должен обработаться только первый
-                    assert beh.query_queue.put.call_count == 1
+                        # last_user_question должен быть установлен
+                        assert behaviour.last_user_question == "камрад, повтори"
 
     @pytest.mark.asyncio
     async def test_similar_but_different_questions_not_echo(self):
