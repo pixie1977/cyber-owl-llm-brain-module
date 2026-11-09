@@ -42,4 +42,21 @@ fi
 echo "🚀 Запуск Cyber Owl LLM Brain..."
 echo "   Для остановки нажмите Ctrl+C"
 
+# Добавь это в start.sh перед запуском Python логгера:
+echo "Очищаем кэш и принудительно закрепляем модель в памяти..."
+sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+sleep 1
+
+curl -X POST http://localhost:11434/api/generate -d '{
+  "model": "qwen3.5:9b-mod",
+  "prompt": "hi",
+  "stream": false
+}' > /dev/null
+
+echo "Модель заблокирована в CUDA. Запускаем ноды робота..."
+sleep 2
+
+
+export OLLAMA_NUM_PARALLEL=1
+
 exec python -m app.main
