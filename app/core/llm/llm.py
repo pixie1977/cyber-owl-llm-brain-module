@@ -46,7 +46,8 @@ llm = ChatOllama(
     temperature=0.2,
     base_url="http://localhost:11434",
     model_kwargs={
-        "repeat_penalty": 1.2,  # Защита от повторения фраз
+        "stop": ["<think>", "\n<think>", "</think>"],
+        "repeat_penalty": 1.2
     }
 ).bind_tools(tools)
 
