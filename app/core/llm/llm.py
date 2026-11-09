@@ -40,12 +40,11 @@ _ollama_oom_blocked_until = 0.0
 
 # --- Настройка модели Ollama ---
 # Инструменты подключаем напрямую — langgraph убивает кэш и производительность на Jetson
-# num_ctx=512: достаточно для коротких ответов, экономит ~4GB VRAM на Jetson Orin
+# num_ctx=1024: достаточно для коротких ответов, экономит ~4GB VRAM на Jetson Orin
 llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     temperature=0.2,
     base_url="http://localhost:11434",
-    num_ctx=1024,
     model_kwargs={
         "repeat_penalty": 1.2,  # Защита от повторения фраз
     }
