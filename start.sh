@@ -48,7 +48,7 @@ sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
 sleep 1
 
 curl -X POST http://localhost:11434/api/generate -d '{
-  "model": "qwen3.5:9b-mod",
+  "model": "qwen3.5:9b",
   "prompt": "hi",
   "stream": false
 }' > /dev/null
