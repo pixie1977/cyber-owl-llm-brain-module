@@ -14,6 +14,7 @@ from app.config.config import MBB_OLLAMA_MODEL_NAME
 from app.core.logger import get_logger
 from app.core.llm.promts import system_prompt
 from app.tools.brawl import get_mat_count, trigger_vicious_response, trigger_violent_mode, not_understand_this
+from app.tools.dice_tool import roll_dice_tool
 from app.tools.jokes import joke_tool
 from app.tools.math import math_tool
 from app.tools.qdrant import search_knowledge_base
@@ -33,6 +34,7 @@ tools = [
     joke_tool,
     toast_tool,
     not_understand_this,
+    roll_dice_tool
 ]
 
 # --- Защита от OOM на Jetson ---
