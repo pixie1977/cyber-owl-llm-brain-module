@@ -43,12 +43,7 @@ _ollama_oom_blocked_until = 0.0
 # num_ctx=1024: достаточно для коротких ответов, экономит ~4GB VRAM на Jetson Orin
 llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
-    temperature=0.2,
     base_url="http://localhost:11434",
-    model_kwargs={
-        "stop": ["<think>", "\n<think>", "</think>"],
-        "repeat_penalty": 1.2
-    }
 ).bind_tools(tools)
 
 log.info("Модель LLM инициализирована: %s", llm.model)

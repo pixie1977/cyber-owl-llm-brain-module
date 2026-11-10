@@ -1,6 +1,8 @@
 import random
 import re
 
+from langchain_core.tools import tool
+
 from app.tools.dice_data.merovinjan_replics_for_dnd import MerovinJanReplicsForDnD
 
 merov = MerovinJanReplicsForDnD()
