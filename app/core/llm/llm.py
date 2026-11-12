@@ -45,10 +45,6 @@ _ollama_oom_blocked_until = 0.0
 llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     base_url="http://localhost:11434",
-    temperature=0.4,  # Усиливаем сарказм и вариативность речи
-    num_ctx=2048,  # С учетом описания tools контекст 1024 будет мал, лучше 2048
-    num_predict=512,
-    repeat_penalty=1.15,
     reasoning=False,  # Отключает thinking mode в свежих версиях langchain-ollama
 ).bind_tools(tools)
 
@@ -124,9 +120,16 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
                         (t for t in tools if getattr(t, "name", getattr(t, "__name__", None)) == tool_call["name"]), None)
                     if tool_func:
                         # Выполняем инструмент локально
-                        tool_output, is_direct_answer = await tool_func.ainvoke(tool_call["args"])
+                        raw_result = await tool_func.ainvoke(tool_call["args"])
 
-                        if is_direct_answer is True:
+                        # Инструменты возвращают (str, bool) или просто str
+                        if isinstance(raw_result, tuple) and len(raw_result) == 2:
+                            tool_output, is_direct_answer = raw_result
+                        else:
+                            tool_output = raw_result
+                            is_direct_answer = True
+
+                        if is_direct_answer:
                             res = tool_output
                         else:
                             # Плоский запрос вместо раздувания графа -- экономит VRAM
