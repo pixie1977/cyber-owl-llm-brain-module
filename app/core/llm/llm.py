@@ -45,9 +45,9 @@ _ollama_oom_blocked_until = 0.0
 llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     base_url="http://localhost:11434",
-    temperature=0.7,  # Усиливаем сарказм и вариативность речи
+    temperature=0.4,  # Усиливаем сарказм и вариативность речи
     num_ctx=2048,  # С учетом описания tools контекст 1024 будет мал, лучше 2048
-    num_predict=256,
+    num_predict=512,
     repeat_penalty=1.15,
     reasoning=False,  # Отключает thinking mode в свежих версиях langchain-ollama
 ).bind_tools(tools)
