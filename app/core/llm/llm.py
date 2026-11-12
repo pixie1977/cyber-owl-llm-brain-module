@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import json
 import re
 import time
 from typing import Dict
@@ -41,16 +42,45 @@ tools = [
 _ollama_oom_blocked_until = 0.0
 
 # --- Настройка модели Ollama ---
-# Инструменты подключаем напрямую — langgraph убивает кэш и производительность на Jetson
-# num_ctx=1024: достаточно для коротких ответов, экономит ~4GB VRAM на Jetson Orin
 llm = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     base_url="http://localhost:11434",
+    temperature=0.7,  # Усиливаем сарказм и вариативность речи
+    num_ctx=2048,  # С учетом описания tools контекст 1024 будет мал, лучше 2048
+    num_predict=256,
+    repeat_penalty=1.15,
+    reasoning=False,  # Отключает thinking mode в свежих версиях langchain-ollama
 ).bind_tools(tools)
 
 log.info("Модель LLM инициализирована: %s", llm.model)
 log.info("Системный промпт и шаблон загружены.")
 log.info("num_ctx=1024 (оптимизировано для Jetson с ограниченной VRAM)")
+
+
+def _parse_llm_tool_calls(content: str) -> list:
+    """Парсит JSON tool calls из ответа LLM для Ollama.
+    
+    Ollama возвращает инструмент как JSON в content:
+    {"name": "roll_dice_tool", "arguments": {"dice_expression": "1d20"}}
+    """
+    tool_calls = []
+    if not content:
+        return tool_calls
+
+    # Ищем JSON-объект с полями name и arguments
+    pattern = r'\{[^{}]*"name"\s*:\s*"[^"]+"[^{}]*"arguments"\s*:\s*\{[^{}]*\}[^{}]*\}'
+    matches = re.findall(pattern, content, re.DOTALL)
+    for json_str in matches:
+        try:
+            data = json.loads(json_str)
+            name = data.get("name", "")
+            args = data.get("arguments", {})
+            if name and args:
+                tool_calls.append({"name": name, "args": args})
+        except Exception as e:
+            log.warning(f"Не удалось распарсить tool call: {json_str}: {e}")
+
+    return tool_calls
 
 
 async def process_request_with_llm(user_message: str, expression_score: Dict) -> str:
@@ -78,8 +108,16 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
             ])
 
             # 2. Проверяем, хочет ли модель вызвать инструмент
-            if ai_message.tool_calls:
-                for tool_call in ai_message.tool_calls:
+            tool_calls = ai_message.tool_calls or []
+            if not tool_calls:
+                # Ollama может вернуть JSON tool call в content
+                json_calls = _parse_llm_tool_calls(ai_message.content or "")
+                if json_calls:
+                    tool_calls = json_calls
+                    log.info("Найдены JSON tool calls: %s", [tc["name"] for tc in tool_calls])
+
+            if tool_calls:
+                for tool_call in tool_calls:
                     log.info("Сова вызывает инструмент: %s", tool_call["name"])
 
                     tool_func = next(
@@ -91,7 +129,7 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
                         if is_direct_answer is True:
                             res = tool_output
                         else:
-                            # Плоский запрос вместо раздувания графа — экономит VRAM
+                            # Плоский запрос вместо раздувания графа -- экономит VRAM
                             flat_prompt = (
                                 f"Пользователь спросил: '{user_message}'. "
                                 f"Системный инструмент вернул данные: {str(tool_output)}. "
@@ -113,18 +151,22 @@ async def process_request_with_llm(user_message: str, expression_score: Dict) ->
         except Exception as e:
             error_msg = str(e).lower()
             if "out of memory" in error_msg or "cuda" in error_msg:
-                # OOM — блокируем Ollama на 30 сек, даём освободить память
+                # OOM -- блокируем Ollama на 30 сек, даём освободить память
                 _ollama_oom_blocked_until = time.time() + 30
-                log.error("CUDA OOM — блокируем Ollama на 30 сек: %s", e)
+                log.error("CUDA OOM -- блокируем Ollama на 30 сек: %s", e)
                 return "Сова перегрелась, подумай покороче."
             log.error("Ошибка инференса Совы: %s", e)
             return "Не удалось обработать запрос"
 
-    # --- Твоя постобработка текста для TTS ---
+    # --- Постобработка текста для TTS ---
     res = re.sub(r'[\u4e00-\u9fff]+', '', res)  # убираем иероглифы
-    math_symbols = ['√', '≈', '/', 'π', '²', '³']
+    math_symbols = ['\u221a', '\u2248', '/', '\u03c0', '\u00b2', '\u00b3']
     for symbol in math_symbols:
         res = res.replace(symbol, '')
+
+    # Чистим от случайных спецсимволов (XML-теги, маркеры и т.п.)
+    clean_text = re.sub(r"[^а-яА-ЯёЁa-zA-Z0-9\s.,!?]", " ", res)
+    res = re.sub(r"\s+", " ", clean_text).strip()
 
     log.info("--> Ответ: %s", res)
     return res
