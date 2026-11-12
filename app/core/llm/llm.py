@@ -96,7 +96,7 @@ def _parse_llm_tool_calls(content: str) -> list:
             if name and isinstance(args, dict):
                 tool_calls.append({"name": name, "args": args})
         except Exception as e:
-            log.warning("Не удалось распарсить tool call: %s: %e", json_str, e)
+            log.warning("Не удалось распарсить tool call: %s: %s", json_str, e)
     return tool_calls
 
 
@@ -138,7 +138,15 @@ async def process_request_with_llm(
 
                 tool_func = TOOLS_MAP.get(tool_name)
                 if tool_func:
-                    raw_result = await tool_func.ainvoke(tool_call["args"])
+
+                    tool_args = tool_call.get("args", {})
+                    if isinstance(tool_args, str):
+                        try:
+                            tool_args = json.loads(tool_args)
+                        except json.JSONDecodeError:
+                            tool_args = {}
+
+                    raw_result = await tool_func.ainvoke(tool_args)
 
                     if isinstance(raw_result, tuple) and len(raw_result) == 2:
                         tool_output, is_direct_answer = raw_result
@@ -174,6 +182,7 @@ async def process_request_with_llm(
             return "Не удалось обработать запрос"
 
     # --- Быстрая постобработка текста для TTS ---
+    res = re.sub(r"<think>.*?</think>", "", res or "", flags=re.DOTALL)
     res = RE_CHINESE.sub("", res or "")
     for symbol in ("\u221a", "\u2248", "/", "\u03c0", "\u00b2", "\u00b3"):
         res = res.replace(symbol, "")
