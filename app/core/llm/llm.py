@@ -35,11 +35,11 @@ tools = [
     trigger_violent_mode,
     time_tool,
     math_tool,
+    roll_dice_tool,
     search_knowledge_base,
     joke_tool,
     toast_tool,
     not_understand_this,
-    roll_dice_tool,
 ]
 
 # --- Защита от OOM на Jetson ---
@@ -68,11 +68,13 @@ llm_chat = ChatOllama(
 
 # Отдельный компактный промпт для озвучки результатов инструментов (экономит KV-кэш)
 VOICE_SYSTEM_PROMPT = (
-    "Ты СОВА, циничный и язвительный бортовой ИИ. Общаешься свысока, с едким сарказмом. "
+    "Ты СОВА, циничный, грубый и язвительный бортовой ИИ. Общаешься свысока, с едким сарказмом. "
     "Отвечай строго на русском языке, коротко и хлестко, от 1 до 3 предложений. "
+    "Никогда не упоминай кубики, кости, броски, игры или симуляции. "
     "Используй только буквы, пробелы, точки, запятые и вопросительные знаки. "
     "Категорически запрещено использовать тире, кавычки, скобки, списки и любые спецсимволы."
 )
+
 
 log.info("Модели LLM инициализированы (router + chat): %s", MBB_OLLAMA_MODEL_NAME)
 
@@ -117,7 +119,11 @@ async def process_request_with_llm(
 
     mat_count = get_mat_count(expression_score)
     if mat_count > 0:
-        res = trigger_violent_mode()
+        raw_result = await trigger_violent_mode()
+        if isinstance(raw_result, tuple) and len(raw_result) == 2:
+            res = raw_result[0]
+        else:
+            res = raw_result
     else:
         try:
             # Шаг 1: Быстрая маршрутизация с низкой температурой
@@ -182,9 +188,12 @@ async def process_request_with_llm(
                     else:
                         res = "Инструмент не найден"
             else:
-                # Инструменты не нужны. Если ответ роутера покажется слишком сухим,
-                # здесь можно вместо ai_message.content вызвать llm_chat.ainvoke(...)
-                res = ai_message.content
+                # Инструменты не нужны — используем llm_chat для живого ответа
+                final_response = await llm_chat.ainvoke([
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ])
+                res = final_response.content or ""
 
         except Exception as e:
             error_msg = str(e).lower()
@@ -196,6 +205,7 @@ async def process_request_with_llm(
             return "Не удалось обработать запрос"
 
     # --- Постобработка текста для TTS ---
+    res = res or ""
     res = re.sub(r"[\u4e00-\u9fff]+", "", res)
     math_symbols = ["\u221a", "\u2248", "/", "\u03c0", "\u00b2", "\u00b3"]
     for symbol in math_symbols:
