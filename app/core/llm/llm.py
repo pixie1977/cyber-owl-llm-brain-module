@@ -50,8 +50,7 @@ llm_router = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     base_url="http://localhost:11434",
     temperature=0.05,
-    num_ctx=2048,
-    num_predict=300,
+    format="json",
     reasoning=False,
 ).bind_tools(tools)
 
@@ -60,8 +59,6 @@ llm_chat = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     base_url="http://localhost:11434",
     temperature=0.7,
-    num_ctx=2048,
-    num_predict=300,
     repeat_penalty=1.15,
     reasoning=False,
 )
