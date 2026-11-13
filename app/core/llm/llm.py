@@ -175,7 +175,7 @@ async def process_request_with_llm(
 
     # Мгновенная реакция на мат без запуска LLM
     if get_mat_count(expression_score) > 0:
-        raw_result = await trigger_violent_mode()
+        raw_result = await trigger_violent_mode.ainvoke({})
         res = raw_result[0] if isinstance(raw_result, tuple) else raw_result
     else:
         mode = classify_intent(user_message)

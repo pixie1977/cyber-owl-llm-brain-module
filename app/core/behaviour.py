@@ -218,7 +218,8 @@ class Behaviour:
         response = ""
 
         if mat_count > 0:
-            response = trigger_violent_mode()
+            raw_res = await trigger_violent_mode.ainvoke({})
+            response = raw_res[0] if isinstance(raw_res, tuple) else str(raw_res)
 
         if not response:
             response = self.common_vector_search.find_answer(query)
