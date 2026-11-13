@@ -11,6 +11,7 @@ import time
 from typing import Dict
 
 from langchain_ollama import ChatOllama
+from num2words import num2words
 
 from app.config.config import MBB_OLLAMA_MODEL_NAME
 from app.core.llm.promts import PROMPT_DEFAULT_CRAZY, PROMPT_CONSULTANT, PROMPT_CONSULTANT_VOICE, PROMPT_TOOLS
@@ -95,6 +96,18 @@ RE_MODE_TOOLS = re.compile(
     r"\b(время|который час|посчитай|сколько будет|синус|косинус|тангенс|корень|степен|кубик|кости|спасбросок|шутк|анекдот|тост|поздрав|макс)\b",
     re.IGNORECASE,
 )
+
+
+def _number_to_words(text: str) -> str:
+    """Заменяет все целые числа в тексте на словесное представление."""
+    def _replace_number(match: re.Match) -> str:
+        num = int(match.group())
+        try:
+            return num2words(num, lang='ru')
+        except Exception:
+            return match.group()
+
+    return re.sub(r'\d+', _replace_number, text)
 
 _ollama_oom_blocked_until = 0.0
 
@@ -244,6 +257,9 @@ async def process_request_with_llm(
     res = RE_CHINESE.sub("", res)
     for symbol in ("\u221a", "\u2248", "/", "\u03c0", "\u00b2", "\u00b3"):
         res = res.replace(symbol, "")
+
+    # Все числа → слова для TTS
+    res = _number_to_words(res)
 
     res = RE_CLEAN_TEXT.sub(" ", res)
     res = RE_SPACES.sub(" ", res).strip()
