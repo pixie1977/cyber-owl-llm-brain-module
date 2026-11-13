@@ -1,6 +1,8 @@
 """
-Модуль инициализации LLM-агента с инструментами и системным промптом.
-Оптимизирован под Jetson Orin NX (16GB) для максимальной скорости и защиты от OOM.
+Модуль LLM-агента с разделением на 3 изолированных режима:
+1. 'crazy' (по умолчанию) — чистая генерация без tools (максимальная скорость, 0 пустых ответов).
+2. 'consultant' — строгий поиск по Qdrant + озвучка фактов.
+3. 'tools' — быстрый вызов бытовых инструментов.
 """
 
 import json
@@ -11,7 +13,7 @@ from typing import Dict
 from langchain_ollama import ChatOllama
 
 from app.config.config import MBB_OLLAMA_MODEL_NAME
-from app.core.llm.promts import system_prompt
+from app.core.llm.promts import PROMPT_DEFAULT_CRAZY, PROMPT_CONSULTANT, PROMPT_CONSULTANT_VOICE, PROMPT_TOOLS
 from app.core.logger import get_logger
 from app.tools.brawl import (
     get_mat_count,
@@ -28,49 +30,55 @@ from app.tools.toast import toast_tool
 
 log = get_logger(__name__)
 
-tools = [
-    trigger_vicious_response,
-    trigger_violent_mode,
-    time_tool,
-    math_tool,
-    roll_dice_tool,
-    search_knowledge_base,
-    joke_tool,
-    toast_tool,
-    not_understand_this,
-]
+# --- 1. НАСТРОЙКА ИНСТАНСОВ (Единый num_ctx=2048 для защиты от переаллокации VRAM) ---
 
-# Словарь для быстрого поиска инструментов за O(1)
-TOOLS_MAP = {
-    getattr(t, "name", getattr(t, "__name__", "")): t for t in tools
-}
-
-_ollama_oom_blocked_until = 0.0
-
-# Единый инстанс LLM: сохраняет общий KV-кэш для системного промпта и снижает расход RAM
-llm_base = ChatOllama(
+llm_crazy = ChatOllama(
     model=MBB_OLLAMA_MODEL_NAME,
     base_url="http://localhost:11434",
-    temperature=0.5,        # Баланс между точностью вызова tools и сарказмом
-    repeat_penalty=1.15,
-    num_ctx=2048,           # Жесткий лимит контекста спасает от фрагментации памяти и OOM
-    num_predict=1024,        # Лимит токенов на ответ (3-4 предложения максимум)
-    keep_alive="15m",       # Держим модель в памяти GPU, чтобы не тратить время на выгрузку/загрузку
+    temperature=0.45,
+    repeat_penalty=1.18,
+    num_ctx=2048,
+    num_predict=180,
+    keep_alive="15m",
     reasoning=False,
 )
 
-# Привязываем инструменты к базовому инстансу (схема кэшируется в префиксе)
-llm_agent = llm_base.bind_tools(tools)
+llm_consultant = ChatOllama(
+    model=MBB_OLLAMA_MODEL_NAME,
+    base_url="http://localhost:11434",
+    temperature=0.15,
+    repeat_penalty=1.15,
+    num_ctx=2048,
+    num_predict=1024,
+    keep_alive="15m",
+    reasoning=False,
+).bind_tools([search_knowledge_base])
 
-VOICE_SYSTEM_PROMPT = (
-    "Ты СОВА, циничный, грубый и язвительный бортовой ИИ. Общаешься свысока, с едким сарказмом. "
-    "Отвечай строго на русском языке, коротко и хлестко, от 1 до 3 предложений. "
-    "Никогда не упоминай кубики, кости, броски, игры или симуляции. "
-    "Используй только буквы, пробелы, точки, запятые и вопросительные знаки. "
-    "Категорически запрещено использовать тире, кавычки, скобки, списки и любые спецсимволы."
-)
+action_tools = [
+    time_tool,
+    math_tool,
+    roll_dice_tool,
+    joke_tool,
+    toast_tool,
+    trigger_vicious_response,
+    not_understand_this,
+]
+TOOLS_MAP = {getattr(t, "name", getattr(t, "__name__", "")): t for t in action_tools}
 
-# Предкомпилированные регулярки для ускорения постобработки
+llm_tools = ChatOllama(
+    model=MBB_OLLAMA_MODEL_NAME,
+    base_url="http://localhost:11434",
+    temperature=0.05,
+    repeat_penalty=1.1,
+    num_ctx=2048,
+    num_predict=200,
+    keep_alive="15m",
+    reasoning=False,
+).bind_tools(action_tools)
+
+# --- 2. РЕГУЛЯРКИ И СЛОЙ МАРШРУТИЗАЦИИ (позже легко заменить на триграммы) ---
+
+RE_THINK = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL)
 RE_TOOL_JSON = re.compile(
     r'\{[^{}]*"name"\s*:\s*"[^"]+"[^{}]*"arguments"\s*:\s*\{[^{}]*\}[^{}]*\}',
     re.DOTALL,
@@ -79,31 +87,69 @@ RE_CHINESE = re.compile(r"[\u4e00-\u9fff]+")
 RE_CLEAN_TEXT = re.compile(r"[^а-яА-ЯёЁa-zA-Z0-9\s.,!?]")
 RE_SPACES = re.compile(r"\s+")
 
-log.info("Единый LLM-агент инициализирован: %s", MBB_OLLAMA_MODEL_NAME)
+RE_MODE_CONSULTANT = re.compile(
+    r"\b(консультант|справка|база|найди|поищи|что такое|кто такой|расскажи про|объясни|поясни за)\b",
+    re.IGNORECASE,
+)
+RE_MODE_TOOLS = re.compile(
+    r"\b(время|который час|посчитай|сколько будет|синус|косинус|тангенс|корень|степен|кубик|кости|спасбросок|шутк|анекдот|тост|поздрав|макс)\b",
+    re.IGNORECASE,
+)
+
+_ollama_oom_blocked_until = 0.0
 
 
-def _parse_llm_tool_calls(content: str) -> list:
-    """Fallback-парсер JSON tool calls, если модель вернула вызов текстом."""
-    if not content or "{" not in content:
-        return []
+def classify_intent(text: str) -> str:
+    """
+    Точка входа для классификации намерения.
+    Сейчас работает на регулярках, позже сюда подключается триграммный индекс.
+    """
+    clean = text.strip()
+    if RE_MODE_CONSULTANT.search(clean):
+        log.warning("Профиль - консультант")
+        return "consultant"
+    if RE_MODE_TOOLS.search(clean):
+        log.warning("Профиль - инструмент")
+        return "tools"
+    log.warning("Профиль - шиза")
+    return "crazy"
 
-    tool_calls = []
+
+def _extract_tool_call(ai_message) -> dict | None:
+    """Извлекает первый tool_call из нативного ответа или текста."""
+    if ai_message.tool_calls:
+        return ai_message.tool_calls[0]
+
+    content = ai_message.content or ""
+    if "{" not in content:
+        return None
+
     for json_str in RE_TOOL_JSON.findall(content):
         try:
             data = json.loads(json_str)
             name = data.get("name", "")
             args = data.get("arguments", {})
             if name and isinstance(args, dict):
-                tool_calls.append({"name": name, "args": args})
+                return {"name": name, "args": args}
         except Exception as e:
-            log.warning("Не удалось распарсить tool call: %s: %s", json_str, e)
-    return tool_calls
+            log.warning("Ошибка парсинга JSON tool call: %s: %s", json_str, e)
+    return None
+
+
+def _parse_args(raw_args) -> dict:
+    if isinstance(raw_args, dict):
+        return raw_args
+    if isinstance(raw_args, str):
+        try:
+            return json.loads(raw_args)
+        except json.JSONDecodeError:
+            return {}
+    return {}
 
 
 async def process_request_with_llm(
     user_message: str, expression_score: Dict
 ) -> str:
-    """Обрабатывает запрос за 1 проход LLM (или 2 только при обращении к БД)."""
     global _ollama_oom_blocked_until
     log.info("Вопрос: %s", user_message)
 
@@ -114,63 +160,75 @@ async def process_request_with_llm(
         return "Сова думает... подожди немного."
     _ollama_oom_blocked_until = 0.0
 
-    # Быстрая реакция на мат без запуска нейросети
+    # Мгновенная реакция на мат без запуска LLM
     if get_mat_count(expression_score) > 0:
         raw_result = await trigger_violent_mode()
         res = raw_result[0] if isinstance(raw_result, tuple) else raw_result
     else:
+        mode = classify_intent(user_message)
+        log.info("Выбран режим: %s", mode)
+
         try:
-            # ЕДИНЫЙ ПРОХОД: модель либо сразу отвечает голосом, либо вызывает инструмент
-            ai_message = await llm_agent.ainvoke([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ])
+            if mode == "tools":
+                ai_msg = await llm_tools.ainvoke([
+                    {"role": "system", "content": PROMPT_TOOLS},
+                    {"role": "user", "content": user_message},
+                ])
+                tool_call = _extract_tool_call(ai_msg)
 
-            tool_calls = ai_message.tool_calls or _parse_llm_tool_calls(
-                ai_message.content or ""
-            )
-
-            if tool_calls:
-                # Берем только первый релевантный инструмент, чтобы не делать лишних циклов
-                tool_call = tool_calls[0]
-                tool_name = tool_call["name"]
-                log.info("Сова вызывает инструмент: %s", tool_name)
-
-                tool_func = TOOLS_MAP.get(tool_name)
-                if tool_func:
-
-                    tool_args = tool_call.get("args", {})
-                    if isinstance(tool_args, str):
-                        try:
-                            tool_args = json.loads(tool_args)
-                        except json.JSONDecodeError:
-                            tool_args = {}
-
-                    raw_result = await tool_func.ainvoke(tool_args)
-
+                if tool_call and tool_call["name"] in TOOLS_MAP:
+                    tool_name = tool_call["name"]
+                    log.info("Вызов инструмента: %s", tool_name)
+                    raw_result = await TOOLS_MAP[tool_name].ainvoke(
+                        _parse_args(tool_call.get("args"))
+                    )
                     if isinstance(raw_result, tuple) and len(raw_result) == 2:
-                        tool_output, is_direct_answer = raw_result
+                        res = str(raw_result[0])
                     else:
-                        tool_output, is_direct_answer = raw_result, True
-
-                    if is_direct_answer:
-                        res = str(tool_output)
-                    else:
-                        # Второй проход делаем ТОЛЬКО если надо озвучить сырые факты из Qdrant/поиска
-                        flat_prompt = (
-                            f"Вопрос: '{user_message}'. Факты: {tool_output}. "
-                            f"Ответь язвительно и по делу на основе фактов."
-                        )
-                        final_response = await llm_base.ainvoke([
-                            {"role": "system", "content": VOICE_SYSTEM_PROMPT},
-                            {"role": "user", "content": flat_prompt},
-                        ])
-                        res = final_response.content or ""
+                        res = str(raw_result)
                 else:
-                    res = "Инструмент не найден"
+                    # Если триггер сработал ложно — отвечаем в базовом режиме
+                    fallback = await llm_crazy.ainvoke([
+                        {"role": "system", "content": PROMPT_DEFAULT_CRAZY},
+                        {"role": "user", "content": user_message},
+                    ])
+                    res = fallback.content or ""
+
+            elif mode == "consultant":
+                ai_msg = await llm_consultant.ainvoke([
+                    {"role": "system", "content": PROMPT_CONSULTANT},
+                    {"role": "user", "content": user_message},
+                ])
+                tool_call = _extract_tool_call(ai_msg)
+
+                if tool_call and tool_call["name"] == "search_knowledge_base":
+                    log.info("Консультант лезет в Qdrant")
+                    raw_result = await search_knowledge_base.ainvoke(
+                        _parse_args(tool_call.get("args"))
+                    )
+                    facts = (
+                        raw_result[0]
+                        if isinstance(raw_result, tuple)
+                        else raw_result
+                    )
+                    final_resp = await llm_crazy.ainvoke([
+                        {"role": "system", "content": PROMPT_CONSULTANT_VOICE},
+                        {
+                            "role": "user",
+                            "content": f"Вопрос: {user_message}. Факты из базы: {facts}",
+                        },
+                    ])
+                    res = final_resp.content or ""
+                else:
+                    res = ai_msg.content or ""
+
             else:
-                # Инструменты не потребовались — сразу забираем ответ первого прохода!
-                res = ai_message.content or ""
+                # Режим по умолчанию ('crazy') — один сверхбыстрый проход без tools
+                ai_msg = await llm_crazy.ainvoke([
+                    {"role": "system", "content": PROMPT_DEFAULT_CRAZY},
+                    {"role": "user", "content": user_message},
+                ])
+                res = ai_msg.content or ""
 
         except Exception as e:
             error_msg = str(e).lower()
@@ -181,9 +239,9 @@ async def process_request_with_llm(
             log.error("Ошибка инференса Совы: %s", e)
             return "Не удалось обработать запрос"
 
-    # --- Быстрая постобработка текста для TTS ---
-    res = re.sub(r"<think>.*?</think>", "", res or "", flags=re.DOTALL)
-    res = RE_CHINESE.sub("", res or "")
+    # --- Постобработка для TTS ---
+    res = RE_THINK.sub("", res or "")
+    res = RE_CHINESE.sub("", res)
     for symbol in ("\u221a", "\u2248", "/", "\u03c0", "\u00b2", "\u00b3"):
         res = res.replace(symbol, "")
 

@@ -2,10 +2,36 @@ import random
 import re
 
 from langchain_core.tools import tool
+from num2words import num2words
 
 from app.tools.dice_data.merovinjan_replics_for_dnd import MerovinJanReplicsForDnD
 
 merov = MerovinJanReplicsForDnD()
+
+
+def _number_to_words(text: str) -> str:
+    """Заменяет все целые числа в тексте на словесное представление.
+    
+    Паттерн NdM (1d20, 2d6) заменяется на "N ДЭ M".
+    Остальные числа — через num2words.
+    """
+    def _replace_d20(match: re.Match) -> str:
+        n = int(match.group(1))
+        m = int(match.group(2))
+        return f"{num2words(n, lang='ru')} ДЭ {num2words(m, lang='ru')}"
+
+    def _replace_number(match: re.Match) -> str:
+        num = int(match.group())
+        try:
+            return num2words(num, lang='ru')
+        except Exception:
+            return match.group()
+
+    # Сначала заменяем NdM паттерны
+    text = re.sub(r'(\d+)d(\d+)', _replace_d20, text)
+    # Потом все оставшиеся числа
+    text = re.sub(r'\d+', _replace_number, text)
+    return text
 
 @tool
 def roll_dice_tool(dice_expression: str = "1d20") -> str:
@@ -53,4 +79,6 @@ def roll_dice_tool(dice_expression: str = "1d20") -> str:
         elif rolls[0] == 1:
             response += merov.get_critical_fail_comment()
 
-    return response
+    # Все числа → слова для TTS
+    response = _number_to_words(response)
+    return response.replace(" дэ", " ДЭ")
