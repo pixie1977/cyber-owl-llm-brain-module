@@ -15,7 +15,7 @@ from app.config.config import MBB_DOC_ROOT
 from app.core.behaviour import Behaviour
 from app.core.data.data import TextRequest, FaceDetection
 from app.core.logger import get_logger
-from app.integration.integration_adapter import stop_tts
+from app.integration.integration_adapter import stop_tts, send_to_tts
 
 # --- Настройка логирования ---
 log = get_logger(__name__)
@@ -87,6 +87,9 @@ async def api_stop_tts() -> dict:
     Вызывается: curl http://localhost:8000/api/stop
     """
     try:
+        # Отменяем текущую задачу TTS на уровне Python
+        await behaviour.cancel_current_tts()
+        # Отправляем команду остановки на TTS-сервер
         await stop_tts()
         return {"status": "stopped"}
     except Exception as e:

@@ -14,7 +14,6 @@ from app.integration.integration_adapter import (
     send_mat_sign_servo,
     send_ready_servo,
     send_to_tts,
-    stop_tts,
     send_lw_up,
     send_lw_down,
 )
@@ -164,6 +163,7 @@ class Behaviour:
         self.is_running = False
         self._thread: Optional[threading.Thread] = None
         self.counter: int = 0
+        self._current_tts_task: Optional[asyncio.Task] = None
 
     # ——— Основной цикл ———
     async def _loop(self) -> None:
@@ -172,7 +172,7 @@ class Behaviour:
             try:
                 if self.state == State.STARTED:
                     await send_ready_servo()
-                    await send_to_tts(get_greetengs())
+                    await self._speak(get_greetengs())
                     self.state = State.READY
 
                 elif self.state == State.READY:
@@ -181,7 +181,7 @@ class Behaviour:
                     if res == 0:
                         self.counter = 0
                     if self.counter > 600:
-                        await send_to_tts(get_psychology_phrase())
+                        await self._speak(get_psychology_phrase())
                     if res > 0:
                         await asyncio.sleep(0.5)
 
@@ -210,6 +210,43 @@ class Behaviour:
         else:
             return 1
 
+    # ——— Управление TTS ———
+    async def _speak(self, text: str) -> None:
+        """
+        Запускает озвучку текста как отдельную задачу.
+        Предыдущая задача отменяется, если ещё не завершена.
+        """
+        # Отменяем предыдущую задачу TTS, если она ещё активна
+        if self._current_tts_task and not self._current_tts_task.done():
+            log.info("Отмена текущей озвучки перед новой")
+            self._current_tts_task.cancel()
+            try:
+                await self._current_tts_task
+            except asyncio.CancelledError:
+                pass
+
+        # Запускаем новую задачу
+        self._current_tts_task = asyncio.create_task(send_to_tts(text))
+        try:
+            await self._current_tts_task
+        except asyncio.CancelledError:
+            log.info("Озвучка отменена")
+        finally:
+            if self._current_tts_task and self._current_tts_task.done():
+                self._current_tts_task = None
+
+    async def cancel_current_tts(self) -> None:
+        """Немедленно отменяет текущую озвучку."""
+        if self._current_tts_task and not self._current_tts_task.done():
+            log.info("Принудительная отмена текущей озвучки")
+            self._current_tts_task.cancel()
+            try:
+                await self._current_tts_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._current_tts_task = None
+
     # ——— Обработка запросов ———
     async def _process_user_query(self, item: Dict[str, Any]) -> None:
         """Генерирует и озвучивает ответ по текстовому запросу."""
@@ -236,7 +273,7 @@ class Behaviour:
 
         if response.strip():
             latest_response = response
-            await send_to_tts(response)
+            await self._speak(response)
         await send_lw_down()
 
     async def post_user_query(self, request: str) -> None:
@@ -251,7 +288,7 @@ class Behaviour:
         # Быстрая реакция на стоп-команды
         if any(cmd in raw_question for cmd in STOP_COMMANDS):
             log.info("Стоп-команда обнаружена, останавливаю TTS: %s", raw_question)
-            await stop_tts()
+            await self.cancel_current_tts()
             return
 
         expression = self.expression_detector.analyze(raw_question)
@@ -285,7 +322,7 @@ class Behaviour:
                 latest_response = response
                 last_user_question = raw_question
                 _record_phrase(response)
-                await send_to_tts(response)
+                await self._speak(response)
             # Очистка после векторного поиска
             del response
             gc.collect()
@@ -344,7 +381,7 @@ class Behaviour:
             greeting_bag = self._create_greeting_bag(person, first_meeting)
             person["last_timestamp"] = current_time
             phrase = greeting_bag.pick()
-            await send_to_tts(phrase)
+            await self._speak(phrase)
             log.debug(
                 "Выдана фраза '%s' для %s (первое встречное: %s)",
                 phrase,
