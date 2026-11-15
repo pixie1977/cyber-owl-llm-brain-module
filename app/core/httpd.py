@@ -15,6 +15,7 @@ from app.config.config import MBB_DOC_ROOT
 from app.core.behaviour import Behaviour
 from app.core.data.data import TextRequest, FaceDetection
 from app.core.logger import get_logger
+from app.integration.integration_adapter import stop_tts
 
 # --- Настройка логирования ---
 log = get_logger(__name__)
@@ -77,3 +78,17 @@ async def get_latest_transcript() -> dict:
         JSON с полем `transcript` (или пустой строкой, если текста нет).
     """
     return {"transcript": latest_question or ""}
+
+
+@app.get("/api/stop")
+async def api_stop_tts() -> dict:
+    """
+    Останавливает текущую озвучку TTS.
+    Вызывается: curl http://localhost:8000/api/stop
+    """
+    try:
+        await stop_tts()
+        return {"status": "stopped"}
+    except Exception as e:
+        log.error("Ошибка при остановке TTS через /api/stop: %s", e)
+        return {"status": "error", "detail": str(e)}

@@ -15,6 +15,7 @@ from num2words import num2words
 
 from app.config.config import MBB_OLLAMA_MODEL_NAME
 from app.core.llm.promts import PROMPT_DEFAULT_CRAZY, PROMPT_CONSULTANT, PROMPT_CONSULTANT_VOICE, PROMPT_TOOLS
+from app.core.llm.trigram_router_selection_config import classify_intent
 from app.core.logger import get_logger
 from app.tools.brawl import (
     get_mat_count,
@@ -88,16 +89,6 @@ RE_CHINESE = re.compile(r"[\u4e00-\u9fff]+")
 RE_CLEAN_TEXT = re.compile(r"[^а-яА-ЯёЁa-zA-Z0-9\s.,!?]")
 RE_SPACES = re.compile(r"\s+")
 
-RE_MODE_CONSULTANT = re.compile(
-    r"\b(консультант|справка|база|найди|поищи|что такое|кто такой|расскажи про|объясни|поясни за)\b",
-    re.IGNORECASE,
-)
-RE_MODE_TOOLS = re.compile(
-    r"\b(время|который час|посчитай|сколько будет|синус|косинус|тангенс|корень|степен|кубик|кости|спасбросок|шутк|анекдот|тост|поздрав|макс)\b",
-    re.IGNORECASE,
-)
-
-
 def _number_to_words(text: str) -> str:
     """Заменяет все целые числа в тексте на словесное представление."""
     def _replace_number(match: re.Match) -> str:
@@ -110,22 +101,6 @@ def _number_to_words(text: str) -> str:
     return re.sub(r'\d+', _replace_number, text)
 
 _ollama_oom_blocked_until = 0.0
-
-
-def classify_intent(text: str) -> str:
-    """
-    Точка входа для классификации намерения.
-    Сейчас работает на регулярках, позже сюда подключается триграммный индекс.
-    """
-    clean = text.strip()
-    if RE_MODE_CONSULTANT.search(clean):
-        log.warning("Профиль - консультант")
-        return "consultant"
-    if RE_MODE_TOOLS.search(clean):
-        log.warning("Профиль - инструмент")
-        return "tools"
-    log.warning("Профиль - шиза")
-    return "crazy"
 
 
 def _extract_tool_call(ai_message) -> dict | None:

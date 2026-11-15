@@ -14,6 +14,7 @@ from app.integration.integration_adapter import (
     send_mat_sign_servo,
     send_ready_servo,
     send_to_tts,
+    stop_tts,
     send_lw_up,
     send_lw_down,
 )
@@ -44,6 +45,9 @@ DAILY_COOLDOWNS_SECONDS = 86400  # 24 часа для "ежедневных" с�
 VECTOR_PHRASE_COOLDOWN_SECONDS = 300  # 5 минут между повторением фраз из векторного поиска
 VECTOR_SIMILARITY_THRESHOLD = 0.9  # Повышенный порог для векторного поиска
 ECHO_SIMILARITY_THRESHOLD = 0.5  # Порог эхо-проверки: "как дела" vs "как жизнь" = 0.75 → не эхо
+
+# --- Стоп-команды для немедленной остановки озвучки ---
+STOP_COMMANDS = ["стоп", "молчи", "хватит", "замолчи", "прекрати", "stop", "quiet", "silence"]
 
 # --- История произнесённых фраз ---
 _recent_phrases: list = []  # [(phrase, timestamp), ...]
@@ -242,7 +246,14 @@ class Behaviour:
         # Принудительная сборка мусора перед обработкой
         gc.collect()
 
-        raw_question = request.strip()
+        raw_question = request.strip().lower()
+
+        # Быстрая реакция на стоп-команды
+        if any(cmd in raw_question for cmd in STOP_COMMANDS):
+            log.info("Стоп-команда обнаружена, останавливаю TTS: %s", raw_question)
+            await stop_tts()
+            return
+
         expression = self.expression_detector.analyze(raw_question)
         mat_count = get_mat_count(expression)
         if mat_count > 0:

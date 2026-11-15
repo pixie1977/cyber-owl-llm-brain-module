@@ -5,7 +5,7 @@
 import asyncio
 import time
 
-from app.config.config import SERVO_URL, TTS_URL
+from app.config.config import SERVO_URL, TTS_URL, TTS_STOP_URL
 from app.core.logger import get_logger
 from app.integration.client import PostClient
 from app.utils.text.basic_text_utils import wrap_answer_with_ssml
@@ -37,6 +37,18 @@ async def send_to_tts(text: str) -> None:
         log.info("Результат отправки в TTS: %s", post_result)
     except Exception as e:
         log.error("Ошибка при отправке в TTS: %s", e)
+
+
+async def stop_tts() -> None:
+    """
+    Останавливает текущую озвучку через TTS-сервис.
+    """
+    try:
+        async with PostClient(TTS_STOP_URL) as client:
+            post_result = await client.stop_tts()
+        log.info("Результат остановки TTS_STOP_URL: %s", post_result)
+    except Exception as e:
+        log.error("Ошибка при остановке TTS_STOP_URL: %s", e)
 
 
 async def send_to_servo(data: dict, url: str) -> None:
