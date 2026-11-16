@@ -1,8 +1,8 @@
 import asyncio
 import gc
 import os
+import re
 import time
-import threading
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +17,7 @@ from app.integration.integration_adapter import (
     send_lw_up,
     send_lw_down,
 )
+from app.integration.client import PostClient
 from app.tools.brawl import get_mat_count, trigger_violent_mode
 from app.tools.common_data.context_common import get_common_context
 from app.tools.common_data.context_psychology import get_psychology_phrase
@@ -25,6 +26,7 @@ from app.core.logic.shuffle_bag import ShuffleBag
 from app.utils.text.basic_text_utils import find_and_crop_by_keywords
 from app.utils.text.expression_language_detector import RussianExpressionLanguageDetector
 from app.utils.text.levenstein_text_utils import similarity_ratio
+from app.config.config import FACE_URL
 
 # --- Мониторинг памяти ---
 _MEMORY_WARN_THRESHOLD_MB = 500  # предупреждение при >500MB
@@ -47,6 +49,16 @@ ECHO_SIMILARITY_THRESHOLD = 0.5  # Порог эхо-проверки: "как �
 
 # --- Стоп-команды для немедленной остановки озвучки ---
 STOP_COMMANDS = ["стоп", "молчи", "хватит", "замолчи", "прекрати", "stop", "quiet", "silence"]
+
+# --- Команды для запоминания лица ---
+REGISTER_COMMANDS = ["запомни", "запомни меня", "я -", "меня зовут", "моё имя", "зови меня"]
+
+# --- Паттерны для извлечения имени ---
+NAME_PATTERNS = [
+    r"(?:я|меня зовут|моё имя|зови меня)[\s-–—]+([А-Яа-яЁёA-Za-z]+(?:[\s-–—][А-Яа-яЁёA-Za-z]+)*)",
+    r"запомни(?:\s+меня)?[\s,.-]+(?:меня\s+)?(?:зовут|имя)[\s-–—]+([А-Яа-яЁёA-Za-z]+)",
+    r"запомни(?:\s+меня)?[\s,.-]+([А-Яа-яЁёA-Za-z]+)",
+]
 
 # --- История произнесённых фраз ---
 _recent_phrases: list = []  # [(phrase, timestamp), ...]
@@ -161,9 +173,10 @@ class Behaviour:
         self.common_vector_search = VectorSearch(get_common_context())
         self.state: State = State.SLEEPING
         self.is_running = False
-        self._thread: Optional[threading.Thread] = None
         self.counter: int = 0
         self._current_tts_task: Optional[asyncio.Task] = None
+        self._abort_processing: bool = False
+        self._last_faces: List[FaceDetection] = []
 
     # ——— Основной цикл ———
     async def _loop(self) -> None:
@@ -187,6 +200,11 @@ class Behaviour:
 
                 elif self.state == State.ANSWERING:
                     item = await self.query_queue.get()
+                    # Проверяем сигнал отмены в очереди
+                    if isinstance(item, dict) and item.get("_abort"):
+                        log.info("Получен сигнал отмены из очереди")
+                        self.state = State.READY
+                        continue
                     await self._process_user_query(item)
                     self.state = State.READY
 
@@ -213,7 +231,8 @@ class Behaviour:
     # ——— Управление TTS ———
     async def _speak(self, text: str) -> None:
         """
-        Запускает озвучку текста как отдельную задачу.
+        Запускает озвучку текста как фоновую задачу.
+        НЕ блокирует event loop — возвращаетcя сразу.
         Предыдущая задача отменяется, если ещё не завершена.
         """
         # Отменяем предыдущую задачу TTS, если она ещё активна
@@ -224,28 +243,110 @@ class Behaviour:
                 await self._current_tts_task
             except asyncio.CancelledError:
                 pass
-
-        # Запускаем новую задачу
-        self._current_tts_task = asyncio.create_task(send_to_tts(text))
-        try:
-            await self._current_tts_task
-        except asyncio.CancelledError:
-            log.info("Озвучка отменена")
-        finally:
-            if self._current_tts_task and self._current_tts_task.done():
+            finally:
                 self._current_tts_task = None
 
+        # Запускаем новую задачу — НЕ ждём завершения
+        self._current_tts_task = asyncio.create_task(send_to_tts(text))
+
     async def cancel_current_tts(self) -> None:
-        """Немедленно отменяет текущую озвучку."""
+        """
+        Немедленно отменяет текущую озвучку и помечает запрос на прерывание.
+        НЕ блокируется — просто отменяет задачу.
+        """
+        self._abort_processing = True
+        # Помещаем сигнал отмены в очередь — _process_user_query его поймает
+        await self.query_queue.put({"_abort": True})
+
         if self._current_tts_task and not self._current_tts_task.done():
             log.info("Принудительная отмена текущей озвучки")
             self._current_tts_task.cancel()
-            try:
-                await self._current_tts_task
-            except asyncio.CancelledError:
-                pass
-            finally:
-                self._current_tts_task = None
+            # Не ждём завершения — просто отменяем
+            self._current_tts_task = None
+
+    # ——— Запоминание лиц ———
+    def _is_stop_command(self, text: str) -> bool:
+        """
+        Проверяет, является ли фраза стоп-командой.
+
+        Args:
+            text: Текст фразы (в нижнем регистре).
+
+        Returns:
+            True, если это стоп-команда.
+        """
+        return any(cmd in text for cmd in STOP_COMMANDS)
+
+    def _extract_name_from_text(self, text: str) -> Optional[str]:
+        """
+        Извлекает имя из фразы пользователя.
+
+        Args:
+            text: Текст фразы (в нижнем регистре).
+
+        Returns:
+            Имя в корректном регистре или None, если не найдено.
+        """
+        for pattern in NAME_PATTERNS:
+            match = re.search(pattern, text)
+            if match:
+                name = match.group(1).strip()
+                # Делаем первую букву заглавной
+                return name.capitalize()
+        return None
+
+    def _is_register_command(self, text: str) -> bool:
+        """
+        Проверяет, является ли фраза командой для запоминания лица.
+
+        Args:
+            text: Текст фразы (в нижнем регистре).
+
+        Returns:
+            True, если это команда для запоминания.
+        """
+        return any(cmd in text for cmd in REGISTER_COMMANDS)
+
+    async def register_face(self, name: str) -> bool:
+        """
+        Регистрирует лицо с указанным именем на видеомодуле.
+
+        Args:
+            name: Имя для регистрации.
+
+        Returns:
+            True, если регистрация успешна.
+        """
+        if not self._last_faces:
+            log.warning("Нет обнаруженных лиц для регистрации")
+            return False
+
+        if len(self._last_faces) != 1:
+            log.warning(f"Ожидается 1 лицо для регистрации, найдено {len(self._last_faces)}")
+            return False
+
+        face = self._last_faces[0]
+        bbox = face.bbox
+
+        log.info(f"Регистрация лица: {name}, bbox={bbox}, confidence={face.confidence}")
+
+        # Формируем тело запроса для видеомодуля
+        payload = {
+            "username": name.lower().replace(" ", "_")
+        }
+
+        try:
+            async with PostClient(FACE_URL) as client:
+                success = await client.post_register(payload)
+            if success:
+                log.info(f"Лицо '{name}' успешно зарегистрировано в видеомодуле")
+                return True
+            else:
+                log.error(f"Ошибка регистрации лица '{name}'")
+                return False
+        except Exception as e:
+            log.error(f"Ошибка при отправке запроса на регистрацию лица: {e}")
+            return False
 
     # ——— Обработка запросов ———
     async def _process_user_query(self, item: Dict[str, Any]) -> None:
@@ -262,14 +363,29 @@ class Behaviour:
             raw_res = await trigger_violent_mode.ainvoke({})
             response = raw_res[0] if isinstance(raw_res, tuple) else str(raw_res)
 
+        if self._abort_processing:
+            log.info("Обработка прервана по стоп-команде")
+            await send_lw_down()
+            return
+
         if not response:
             response = self.common_vector_search.find_answer(query)
+
+        if self._abort_processing:
+            log.info("Обработка прервана по стоп-команде")
+            await send_lw_down()
+            return
 
         if not response or response == "None":
             response = await process_request_with_llm(
                 item.get("query"),
                 item.get("expression"),
             )
+
+        if self._abort_processing:
+            log.info("Обработка прервана по стоп-команде")
+            await send_lw_down()
+            return
 
         if response.strip():
             latest_response = response
@@ -278,6 +394,14 @@ class Behaviour:
 
     async def post_user_query(self, request: str) -> None:
         """Обрабатывает и ставит в очередь пользовательский запрос."""
+        self._abort_processing = False
+        try:
+            await self._post_user_query_impl(request)
+        except Exception as e:
+            log.error("Ошибка в post_user_query: %s", e, exc_info=True)
+
+    async def _post_user_query_impl(self, request: str) -> None:
+        """Реальная логика обработки пользовательского запроса."""
         global latest_question, latest_response, last_user_question
 
         # Принудительная сборка мусора перед обработкой
@@ -290,6 +414,22 @@ class Behaviour:
             log.info("Стоп-команда обнаружена, останавливаю TTS: %s", raw_question)
             await self.cancel_current_tts()
             return
+
+        # Проверка команды запоминания лица
+        if self._is_register_command(raw_question):
+            extracted_name = self._extract_name_from_text(raw_question)
+            if extracted_name:
+                log.info(f"Обнаружена команда запоминания лица: {extracted_name}")
+                success = await self.register_face(extracted_name)
+                if success:
+                    await self._speak(f"Хорошо, я запомнил тебя, {extracted_name}.")
+                else:
+                    await self._speak("Я не вижу лица в кадре, чтобы запомнить.")
+                return
+            else:
+                log.warning("Не удалось извлечь имя из фразы")
+                await self._speak("Пожалуйста, скажи своё имя чётче.")
+                return
 
         expression = self.expression_detector.analyze(raw_question)
         mat_count = get_mat_count(expression)
@@ -338,6 +478,13 @@ class Behaviour:
 
         # Мониторинг памяти после обработки запроса
         _check_memory()
+
+        # Освобождаем память
+        del raw_question, expression, mat_count, question
+        gc.collect()
+
+        # Сбрасываем флаг прерывания для следующего запроса
+        self._abort_processing = False
 
     # ——— Обработка лиц ———
     async def _process_image(self, faces: List[FaceDetection]) -> None:
@@ -392,28 +539,38 @@ class Behaviour:
     # ——— Управление жизненным циклом ———
     async def post_faces(self, faces: List[FaceDetection]) -> None:
         """Добавляет изображение с лицами в очередь обработки."""
-        await self.img_queue.put(faces.copy())
-
-    def _start_async_loop(self) -> None:
-        """Запуск цикла в отдельном потоке."""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(self._loop())
-        finally:
-            loop.close()
+            # Сохраняем последнее обнаруженное лицо
+            self._last_faces = list(faces)
+            log.info(f"Обнаружено {len(faces)} лиц. Последнее: {[f.get('name') if isinstance(f, dict) else getattr(f, 'name', 'unknown') for f in faces]}")
+            await self.img_queue.put(faces.copy())
+        except Exception as e:
+            log.error("Ошибка в post_faces: %s", e, exc_info=True)
+
+    async def post_user_query_direct(self, request: str) -> None:
+        """
+        Прямой вызов обработки запроса из основного event loop.
+        Используется для синхронных вызовов (например, из тестов).
+        """
+        self._abort_processing = False
+        try:
+            await self._post_user_query_impl(request)
+        except Exception as e:
+            log.error("Ошибка в post_user_query_direct: %s", e, exc_info=True)
 
     def start(self) -> None:
-        """Запуск поведенческого автомата."""
+        """
+        Запуск поведенческого автомата.
+        Запускает _loop() в текущем event loop.
+        Должен вызываться из async-контекста.
+        """
         if not self.is_running:
             self.is_running = True
             self.state = State.STARTED
-            self._thread = threading.Thread(target=self._start_async_loop, daemon=True)
-            self._thread.start()
+            log.info("Behaviour запущен в текущем event loop")
 
     def stop(self) -> None:
-        """Остановка и ожидание завершения потока."""
+        """Остановка поведенческого автомата."""
         if self.is_running:
             self.is_running = False
-            if self._thread:
-                self._thread.join(timeout=2.0)
+            log.info("Behaviour остановлен")

@@ -4,6 +4,7 @@ HTTP-сервер на FastAPI для STT с поддержкой GET и POST.
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import List
 
@@ -29,9 +30,12 @@ async def lifespan(app: FastAPI):
     global behaviour
     behaviour = Behaviour()
     behaviour.start()
+    # Запускаем _loop() в текущем event loop (тот же, что у FastAPI)
+    asyncio.create_task(behaviour._loop())
     print("Поведенческий модуль запущен!")
     yield
     # ---- 2. ЭТО вызовется ПРИ ЗАВЕРШЕНИИ РАБОТЫ (СТОПЕ) ----
+    behaviour.stop()
     print("Поведенческий модуль останавливается...")
 
 app = FastAPI(title="STT API Server", lifespan=lifespan)
@@ -45,6 +49,8 @@ app.mount("/static", StaticFiles(directory=MBB_DOC_ROOT), name="static")
 async def receive_text(request: TextRequest) -> dict:
     """
     Принимает текст через POST-запрос и сохраняет его.
+    Обработка запускается как фоновая задача, чтобы /api/stop мог
+    прервать её в любой момент.
 
     Args:
         request: Объект с полем `text`.
@@ -54,7 +60,8 @@ async def receive_text(request: TextRequest) -> dict:
     """
     global behaviour
     question = request.text.strip()
-    await behaviour.post_user_query(question)
+    # Запускаем обработку как фоновую задачу — не блокируем endpoint
+    asyncio.create_task(behaviour.post_user_query(question))
     return {"status": "success", "received_text": question}
 
 @app.post("/image_detect")
@@ -64,7 +71,8 @@ async def receive_image_detect(request: list[FaceDetection]) -> dict:
 
     log.info(f"Received image detect: {raw_data}")
 
-    await behaviour.post_faces(request)
+    # Запускаем как фоновую задачу, чтобы не блокировать endpoint
+    asyncio.create_task(behaviour.post_faces(request))
 
     return {"status": "success"}
 

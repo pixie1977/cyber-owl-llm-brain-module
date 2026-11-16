@@ -61,3 +61,7 @@ if not TTS_STOP_URL:
 SERVO_URL = os.getenv("SERVO_URL")
 if not SERVO_URL:
     raise ValueError("Не задан SERVO_URL в .env")
+
+FACE_URL = os.getenv("FACE_URL")
+if not FACE_URL:
+    raise ValueError("Не задан FACE_URL в .env")

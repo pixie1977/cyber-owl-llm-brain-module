@@ -95,6 +95,24 @@ class PostClient:
             print(f"❌ Ошибка при остановке TTS: {e}")
             return False
 
+    async def post_register(self, json: dict) -> bool:
+        """
+        Отправляет данные для регистрации лица на видеомодуль.
+
+        :param json: Словарь с данными регистрации (например, {"username": "ivan"}).
+        :return: True, если запрос успешен.
+        """
+        if not self.session:
+            print("❌ Сессия не открыта. Используйте контекстный менеджер.")
+            return False
+
+        try:
+            async with self.session.post(f"{self.url}/register-face", json=json) as resp:
+                return resp.status in (200, 201)
+        except Exception as e:
+            print(f"❌ Ошибка при регистрации лица: {e}")
+            return False
+
     async def get_latest_transcript(self) -> str:
         """
         Получает последнюю распознанную фразу с сервера.
