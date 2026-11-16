@@ -412,7 +412,8 @@ class Behaviour:
         # Быстрая реакция на стоп-команды
         if any(cmd in raw_question for cmd in STOP_COMMANDS):
             log.info("Стоп-команда обнаружена, останавливаю TTS: %s", raw_question)
-            await self.cancel_current_tts()
+            stop_result = await self.cancel_current_tts()
+            log.info("Стоп-команда RES = %s", stop_result)
             return
 
         # Проверка команды запоминания лица

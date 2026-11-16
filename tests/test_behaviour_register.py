@@ -48,6 +48,36 @@ class TestStopCommands:
     def test_stop_command_not_in_joke(self):
         assert self.behaviour._is_stop_command("расскажи анекдот") is False
 
+    def test_stop_command_silence(self):
+        assert self.behaviour._is_stop_command("silence") is True
+
+    def test_stop_command_in_long_sentence(self):
+        assert self.behaviour._is_stop_command("слушай, стоп, я сейчас занят") is True
+
+    def test_stop_command_mixed_case(self):
+        assert self.behaviour._is_stop_command("СТОП") is True
+
+    def test_stop_command_not_in_museum(self):
+        """Слово 'музей' не должно содержать стоп-команду."""
+        assert self.behaviour._is_stop_command("музей") is False
+
+    def test_stop_command_not_in_storm(self):
+        """Слово 'шторка' не должно содержать стоп-команду."""
+        assert self.behaviour._is_stop_command("шторка") is False
+
+    def test_stop_command_with_stop_word(self):
+        """Слово 'стопка' содержит 'стоп' — должно сработать."""
+        assert self.behaviour._is_stop_command("стопка") is True
+
+    def test_stop_command_speak_stop(self):
+        assert self.behaviour._is_stop_command("speak stop now") is True
+
+    def test_stop_command_zamolchi(self):
+        assert self.behaviour._is_stop_command("замолчи") is True
+
+    def test_stop_command_prekroti(self):
+        assert self.behaviour._is_stop_command("прекрати") is True
+
 
 # ==================== Тесты REGISTER_COMMANDS ====================
 
@@ -83,6 +113,315 @@ class TestRegisterCommands:
 
     def test_register_command_not_in_story(self):
         assert self.behaviour._is_register_command("расскажи историю") is False
+
+    def test_register_command_zapomni_english(self):
+        assert self.behaviour._is_register_command("zapomni") is True
+
+    def test_register_command_partial_match(self):
+        assert self.behaviour._is_register_command("запомни, я хочу представиться") is True
+
+    def test_register_command_not_in_zapret(self):
+        """Слово 'запрет' содержит 'запомни' частично — нет, не содержит."""
+        assert self.behaviour._is_register_command("запрет") is False
+
+
+# ==================== Тесты _is_stop_command (отдельный класс) ====================
+
+class TestIsStopCommand:
+    """Дополнительные тесты для _is_stop_command."""
+
+    def setup_method(self):
+        self.behaviour = Behaviour()
+
+    def test_stop_command_all_variants(self):
+        """Проверка всех вариантов стоп-команд."""
+        for cmd in STOP_COMMANDS:
+            assert self.behaviour._is_stop_command(cmd) is True
+
+    def test_stop_command_empty(self):
+        assert self.behaviour._is_stop_command("") is False
+
+    def test_stop_command_whitespace(self):
+        assert self.behaviour._is_stop_command("   ") is False
+
+    def test_stop_command_with_numbers(self):
+        assert self.behaviour._is_stop_command("стоп123") is True
+
+    def test_stop_command_unicode(self):
+        assert self.behaviour._is_stop_command("стоп！") is True
+
+    def test_stop_command_newline(self):
+        assert self.behaviour._is_stop_command("\nстоп\n") is True
+
+    def test_stop_command_tab(self):
+        assert self.behaviour._is_stop_command("\tстоп\t") is True
+
+
+# ==================== Тесты NAME_PATTERNS regex ====================
+
+class TestNamePatterns:
+    """Проверка regex-паттернов извлечения имени."""
+
+    def setup_method(self):
+        self.behaviour = Behaviour()
+
+    def test_pattern_en_dash(self):
+        """Имя с en-dash (–)."""
+        name = self.behaviour._extract_name_from_text("я – иван")
+        assert name == "Иван"
+
+    def test_pattern_em_dash(self):
+        """Имя с em-dash (—)."""
+        name = self.behaviour._extract_name_from_text("я — мария")
+        assert name == "Мария"
+
+    def test_pattern_hyphen(self):
+        """Имя с дефисом (-)."""
+        name = self.behaviour._extract_name_from_text("я - макс")
+        assert name == "Макс"
+
+    def test_pattern_multiple_spaces(self):
+        """Имя с несколькими пробелами."""
+        name = self.behaviour._extract_name_from_text("я    -    дмитрий")
+        assert name == "Дмитрий"
+
+    def test_pattern_space_hyphen_space(self):
+        """Имя с пробелами вокруг дефиса."""
+        name = self.behaviour._extract_name_from_text("я - елена")
+        assert name == "Елена"
+
+    def test_pattern_mixed_dash_types(self):
+        """Разные типы тире в разных фразах."""
+        n1 = self.behaviour._extract_name_from_text("я - алексей")
+        n2 = self.behaviour._extract_name_from_text("я – ольга")
+        n3 = self.behaviour._extract_name_from_text("я — петр")
+        assert n1 == "Алексей"
+        assert n2 == "Ольга"
+        assert n3 == "Петр"
+
+    def test_pattern_two_word_name_en_dash(self):
+        name = self.behaviour._extract_name_from_text("я – анна мария")
+        assert name == "Анна Мария"
+
+    def test_pattern_two_word_name_em_dash(self):
+        name = self.behaviour._extract_name_from_text("я — иван петрович")
+        assert name == "Иван Петрович"
+
+    def test_pattern_with_comma(self):
+        name = self.behaviour._extract_name_from_text("я - сергей, запомни")
+        assert name == "Сергей"
+
+    def test_pattern_with_period(self):
+        name = self.behaviour._extract_name_from_text("я - нина.")
+        assert name == "Нина"
+
+    def test_pattern_mixed_cyrillic_latin(self):
+        """Кириллица + латиница в имени."""
+        name = self.behaviour._extract_name_from_text("я - иван john")
+        assert name == "Иван John"
+
+    def test_pattern_lowercase_name(self):
+        """Имя в нижнем регистре — должно стать с заглавной."""
+        name = self.behaviour._extract_name_from_text("я - петр")
+        assert name == "Петр"
+        assert name[0].isupper()
+
+    def test_pattern_uppercase_name(self):
+        """Имя в верхнем регистре."""
+        name = self.behaviour._extract_name_from_text("я - ПЁТР")
+        assert name == "Пётр"
+
+    def test_pattern_single_cyrillic_letter(self):
+        """Имя из одной буквы."""
+        name = self.behaviour._extract_name_from_text("я - а")
+        assert name == "А"
+
+    def test_pattern_no_name_after_dash(self):
+        """Тире без имени после него."""
+        name = self.behaviour._extract_name_from_text("я -")
+        assert name is None
+
+    def test_pattern_only_dash(self):
+        """Только тире."""
+        name = self.behaviour._extract_name_from_text("—")
+        assert name is None
+
+    def test_pattern_empty_string(self):
+        name = self.behaviour._extract_name_from_text("")
+        assert name is None
+
+    def test_pattern_only_whitespace(self):
+        name = self.behaviour._extract_name_from_text("   ")
+        assert name is None
+
+    def test_pattern_special_chars_only(self):
+        name = self.behaviour._extract_name_from_text("!@#$%^&*()")
+        assert name is None
+
+    def test_pattern_name_with_underscore(self):
+        """Имя с подчёркиванием — подчёркивание не входит в паттерн."""
+        name = self.behaviour._extract_name_from_text("я - иван_иванов")
+        assert name == "Иван"
+
+    def test_pattern_name_with_numbers(self):
+        """Имя с цифрами — цифры не входят в паттерн."""
+        name = self.behaviour._extract_name_from_text("я - иван2024")
+        assert name == "Иван"
+
+    def test_pattern_zapomni_meny_zovut(self):
+        """Паттерн 'запомни меня зовут' с en-dash."""
+        name = self.behaviour._extract_name_from_text("запомни меня зовут – владимир")
+        assert name == "Владимир"
+
+    def test_pattern_zapomni_meny_zovut_with_comma(self):
+        """Паттерн 'запомни меня зовут' с запятой."""
+        name = self.behaviour._extract_name_from_text("запомни, меня зовут, вика")
+        assert name == "Вика"
+
+    def test_pattern_zapomni_direct_name(self):
+        """Паттерн 'запомни имя' с прямой ссылкой."""
+        name = self.behaviour._extract_name_from_text("запомни имя влад")
+        assert name == "Влад"
+
+    def test_pattern_zapomni_direct_name_with_comma(self):
+        name = self.behaviour._extract_name_from_text("запомни, владимир")
+        assert name == "Владимир"
+
+    def test_pattern_three_word_name(self):
+        """Имя из трёх слов."""
+        name = self.behaviour._extract_name_from_text("я - анна мария иванова")
+        assert name == "Анна Мария Иванова"
+
+    def test_pattern_hyphenated_name(self):
+        """Имя с дефисом внутри (например, двойная фамилия)."""
+        name = self.behaviour._extract_name_from_text("я - мария-анна")
+        assert name == "Мария-Анна"
+
+    def test_pattern_english_name_with_hyphen(self):
+        """Английское имя с дефисом."""
+        name = self.behaviour._extract_name_from_text("я - mary-jane")
+        assert name == "Mary-Jane"
+
+    def test_pattern_yo_letter(self):
+        """Имя с буквой ё."""
+        name = self.behaviour._extract_name_from_text("я - ёлка")
+        assert name == "Ёлка"
+
+    def test_pattern_yo_in_name(self):
+        name = self.behaviour._extract_name_from_text("меня зовут ёжик")
+        assert name == "Ёжик"
+
+    def test_pattern_name_with_exclamation(self):
+        name = self.behaviour._extract_name_from_text("я - максим!")
+        assert name == "Максим"
+
+    def test_pattern_name_with_question(self):
+        name = self.behaviour._extract_name_from_text("я - анна?")
+        assert name == "Анна"
+
+    def test_pattern_zapomni_without_meny(self):
+        """Паттерн 'запомни' без 'меня'."""
+        name = self.behaviour._extract_name_from_text("запомни, зовут сергей")
+        assert name == "Сергей"
+
+    def test_pattern_zapomni_with_period(self):
+        name = self.behaviour._extract_name_from_text("запомни. зовут нина.")
+        assert name == "Нина"
+
+    def test_pattern_zapomni_with_dot(self):
+        name = self.behaviour._extract_name_from_text("запомни. виктория")
+        assert name == "Виктория"
+
+    def test_pattern_zapomni_with_dash(self):
+        name = self.behaviour._extract_name_from_text("запомни - олег")
+        assert name == "Олег"
+
+    def test_pattern_zapomni_with_en_dash(self):
+        name = self.behaviour._extract_name_from_text("запомни – ольга")
+        assert name == "Ольга"
+
+    def test_pattern_zapomni_with_em_dash(self):
+        name = self.behaviour._extract_name_from_text("запомни — денис")
+        assert name == "Денис"
+
+    def test_pattern_zapomni_with_newline(self):
+        name = self.behaviour._extract_name_from_text("запомни\nзовут аня")
+        assert name == "Аня"
+
+    def test_pattern_zapomni_with_tab(self):
+        name = self.behaviour._extract_name_from_text("запомни\тзовут лена")
+        assert name == "Лена"
+
+    def test_pattern_mixed_dash_between_names(self):
+        """Разные типы тире между разными именами."""
+        n1 = self.behaviour._extract_name_from_text("я - макс")
+        n2 = self.behaviour._extract_name_from_text("я – олег")
+        n3 = self.behaviour._extract_name_from_text("я — нина")
+        assert n1 == "Макс"
+        assert n2 == "Олег"
+        assert n3 == "Нина"
+
+    def test_pattern_complex_sentence(self):
+        """Сложное предложение с именем."""
+        name = self.behaviour._extract_name_from_text(
+            "привет, я - иван петрович, запомни меня"
+        )
+        assert name == "Иван Петрович"
+
+    def test_pattern_zapomni_meny_zovut_with_dash(self):
+        """Паттерн 'запомни меня зовут' с тире."""
+        name = self.behaviour._extract_name_from_text(
+            "запомни меня зовут — владимир"
+        )
+        assert name == "Владимир"
+
+    def test_pattern_zapomni_meny_zovut_with_comma_dash(self):
+        name = self.behaviour._extract_name_from_text(
+            "запомни, меня зовут - сергей"
+        )
+        assert name == "Сергей"
+
+    def test_pattern_zapomni_direct_with_comma(self):
+        name = self.behaviour._extract_name_from_text(
+            "запомни, зовут андрей"
+        )
+        assert name == "Андрей"
+
+    def test_pattern_zapomni_direct_with_period(self):
+        name = self.behaviour._extract_name_from_text(
+            "запомни. зовут вика"
+        )
+        assert name == "Вика"
+
+    def test_pattern_zapomni_direct_with_hyphen(self):
+        name = self.behaviour._extract_name_from_text(
+            "запомни - олег"
+        )
+        assert name == "Олег"
+
+    def test_pattern_zapomni_direct_with_en_dash(self):
+        name = self.behaviour._extract_name_from_text(
+            "запомни – елена"
+        )
+        assert name == "Елена"
+
+    def test_pattern_zapomni_direct_with_em_dash(self):
+        name = self.behaviour._extract_name_from_text(
+            "запомни — дмитрий"
+        )
+        assert name == "Дмитрий"
+
+    def test_pattern_zapomni_direct_with_newline(self):
+        name = self.behaviour._extract_name_from_text(
+            "запомни\nзовут аня"
+        )
+        assert name == "Аня"
+
+    def test_pattern_zapomni_direct_with_tab(self):
+        name = self.behaviour._extract_name_from_text(
+            "запомни\tзовут лена"
+        )
+        assert name == "Лена"
 
 
 # ==================== Тесты извлечения имени ====================
