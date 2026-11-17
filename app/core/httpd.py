@@ -69,7 +69,7 @@ async def receive_image_detect(request: list[FaceDetection]) -> dict:
 
     raw_data = [item.model_dump() for item in request]
 
-    log.info(f"Received image detect: {raw_data}")
+    log.debug(f"Received image detect: {raw_data}")
 
     # Запускаем как фоновую задачу, чтобы не блокировать endpoint
     asyncio.create_task(behaviour.post_faces(request))
