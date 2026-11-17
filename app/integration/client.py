@@ -107,7 +107,7 @@ class PostClient:
             return False
 
         try:
-            async with self.session.post(f"{self.url}/register-face", json=json) as resp:
+            async with self.session.post(f"{self.url}", json=json) as resp:
                 return resp.status in (200, 201)
         except Exception as e:
             print(f"❌ Ошибка при регистрации лица: {e}")
