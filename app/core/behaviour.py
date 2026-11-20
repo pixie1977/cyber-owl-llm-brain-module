@@ -200,11 +200,6 @@ class Behaviour:
 
                 elif self.state == State.ANSWERING:
                     item = await self.query_queue.get()
-                    # Проверяем сигнал отмены в очереди
-                    if isinstance(item, dict) and item.get("_abort"):
-                        log.info("Получен сигнал отмены из очереди")
-                        self.state = State.READY
-                        continue
                     await self._process_user_query(item)
                     self.state = State.READY
 
@@ -364,28 +359,26 @@ class Behaviour:
             response = raw_res[0] if isinstance(raw_res, tuple) else str(raw_res)
 
         if self._abort_processing:
-            log.info("Обработка прервана по стоп-команде")
+            log.info("Обработка прервана по стоп-команде 1")
+            self.state = State.READY
+            await send_lw_down()
+            return
+
+        # Проверяем сигнал отмены в очереди
+        if isinstance(item, dict) and item.get("_abort"):
+            log.info("Обработка прервана по стоп-команде 2")
+            self.state = State.READY
             await send_lw_down()
             return
 
         if not response:
             response = self.common_vector_search.find_answer(query)
 
-        if self._abort_processing:
-            log.info("Обработка прервана по стоп-команде")
-            await send_lw_down()
-            return
-
         if not response or response == "None":
             response = await process_request_with_llm(
                 item.get("query"),
                 item.get("expression"),
             )
-
-        if self._abort_processing:
-            log.info("Обработка прервана по стоп-команде")
-            await send_lw_down()
-            return
 
         if response.strip():
             latest_response = response
