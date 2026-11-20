@@ -15,7 +15,7 @@ from app.integration.integration_adapter import (
     send_ready_servo,
     send_to_tts,
     send_lw_up,
-    send_lw_down,
+    send_lw_down, stop_tts,
 )
 from app.integration.client import PostClient
 from app.tools.brawl import get_mat_count, trigger_violent_mode
@@ -361,6 +361,7 @@ class Behaviour:
         if self._abort_processing:
             log.info("Обработка прервана по стоп-команде 1")
             self.state = State.READY
+            await stop_tts()
             await send_lw_down()
             return
 
@@ -368,6 +369,7 @@ class Behaviour:
         if isinstance(item, dict) and item.get("_abort"):
             log.info("Обработка прервана по стоп-команде 2")
             self.state = State.READY
+            await stop_tts()
             await send_lw_down()
             return
 
