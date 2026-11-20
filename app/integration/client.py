@@ -108,7 +108,7 @@ class PostClient:
 
         try:
             async with self.session.post(f"{self.url}", json=json) as resp:
-                logger.info("post_register status: %s", resp.status)
+                print("post_register status: %s", resp.status)
                 return resp.status in (200, 201)
         except Exception as e:
             print(f"❌ Ошибка при регистрации лица: {e}")
