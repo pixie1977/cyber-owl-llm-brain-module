@@ -12,6 +12,13 @@ INTENT_EXAMPLES = {
         "расскажи про",
         "объясни что значит",
         "поясни за",
+        "расскажи как",
+        "расскажи технологию",
+        "как сделать",
+        "как сбацать"
+        "как сварганить",
+        "как запоганить",
+        "как сотворить",
     ],
     "tools": [
         "который час",
@@ -43,5 +50,5 @@ intent_router = TrigramIntentRouter(INTENT_EXAMPLES, threshold=0.40)
 
 def classify_intent(text: str) -> str:
     mode, score = intent_router.predict(text, default="crazy")
-    log.debug("Роутер: режим=%s (score=%.3f)", mode, score)
+    log.info("Роутер: режим=%s (score=%.3f)", mode, score)
     return mode
