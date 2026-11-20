@@ -89,7 +89,7 @@ class PostClient:
             return False
 
         try:
-            async with self.session.post(f"{self.url}") as resp:
+            async with self.session.get(f"{self.url}") as resp:
                 return resp.status == 200
         except Exception as e:
             print(f"❌ Ошибка при остановке TTS: {e}")
